@@ -1,8 +1,45 @@
-import { Link } from "react-router-dom"
-
+import { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import axios from "axios"
+import { authService } from "../utils/auth"
 import groceryImg from "../assets/grocery1.png"
 
 export default function Login() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    try {
+      const response = await axios.post("http://localhost:5000/api/auth/login", {
+        email,
+        password,
+      })
+
+      // Save token and user info
+      authService.setAuth(response.data.token, response.data.user)
+
+      // Redirect based on user role
+      if (response.data.user.role === "admin") {
+        navigate("/admin")
+      } else {
+        navigate("/products")
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.msg || "Login failed. Please check your credentials."
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen bg-white-100">
       {/* Left Image Panel */}
@@ -25,7 +62,13 @@ export default function Login() {
             Login
           </h2>
 
-          <form className="space-y-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label className="block text-gray-700 mb-2 font-medium">
                 Email
@@ -33,6 +76,9 @@ export default function Login() {
               <input
                 type="email"
                 placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-150"
               />
             </div>
@@ -44,16 +90,19 @@ export default function Login() {
               <input
                 type="password"
                 placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-150"
               />
             </div>
 
             <button
               type="submit"
-              // Changed button color to Mint Green
-              className="w-full bg-green-500 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-green-600 transition duration-200 ease-in-out transform hover:-translate-y-0.5"
+              disabled={loading}
+              className="w-full bg-green-500 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-green-600 transition duration-200 ease-in-out transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Login
+              {loading ? "Logging in..." : "Login"}
             </button>
           </form>
 

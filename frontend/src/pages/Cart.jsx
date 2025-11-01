@@ -1,47 +1,111 @@
-import { useState } from "react"
-import { Link } from "react-router-dom" // Added Link import for the empty cart state
+import { useState, useEffect } from "react"
+import axios from "axios"
+import { Link } from "react-router-dom"
+import { authService } from "../utils/auth"
 
 export default function Cart() {
-  // Example cart items (replace with real data later)
-  const [cartItems, setCartItems] = useState([
-    { id: 1, name: "Apple", price: 2.5, quantity: 3 },
-    { id: 2, name: "Banana", price: 1.25, quantity: 5 },
-    { id: 3, name: "Milk (1L)", price: 3.75, quantity: 2 },
-  ])
+  const [cartItems, setCartItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // --- FETCH CART DATA FROM BACKEND ---
+  useEffect(() => {
+    const fetchCart = async () => {
+      try {
+        setLoading(true)
+        const userId = authService.getUserId()
+        if (!userId) {
+          setError("Please login to view your cart")
+          setLoading(false)
+          return
+        }
+
+        const response = await axios.get(
+          `http://localhost:5000/api/cart?userId=${userId}`
+        )
+        setCartItems(response.data)
+      } catch (err) {
+        console.error("Error fetching cart:", err)
+        setError("Failed to load cart. Please try again later.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCart()
+  }, [])
 
   // --- HANDLER FUNCTIONS ---
 
   // Remove item from cart
-  const removeItem = (id) => {
-    setCartItems(cartItems.filter((item) => item.id !== id))
+  const removeItem = async (id) => {
+    try {
+      const userId = authService.getUserId()
+      if (!userId) {
+        alert("Please login to modify cart")
+        return
+      }
+
+      const response = await axios.delete(
+        `http://localhost:5000/api/cart/${id}?userId=${userId}`
+      )
+      // Backend returns updated cart items
+      setCartItems(response.data)
+    } catch (err) {
+      console.error("Failed to remove item:", err)
+      alert("Unable to remove item. Please try again.")
+    }
   }
 
   // Update item quantity
-  const updateQuantity = (id, newQuantity) => {
+  const updateQuantity = async (id, newQuantity) => {
     const finalQuantity = Math.max(1, newQuantity)
 
-    setCartItems(
-      cartItems.map((item) =>
-        item.id === id ? { ...item, quantity: finalQuantity } : item
-      )
-    )
+    try {
+      const userId = authService.getUserId()
+      if (!userId) {
+        alert("Please login to modify cart")
+        return
+      }
+
+      const response = await axios.put(`http://localhost:5000/api/cart/${id}`, {
+        userId,
+        quantity: finalQuantity,
+      })
+      // Backend returns updated cart items
+      setCartItems(response.data)
+    } catch (err) {
+      console.error("Failed to update quantity:", err)
+      alert("Unable to update quantity. Please try again.")
+    }
   }
 
-  // Calculate total price
+  // Calculate totals
   const subtotal = cartItems.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   )
-
-  // Assuming a fixed shipping fee for this example. Keeping 100.0 as requested.
   const shippingFee = subtotal > 0 ? 100.0 : 0
   const total = subtotal + shippingFee
 
-  // --- RENDER COMPONENT ---
+  // --- RENDER ---
+
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-green-800 font-bold text-2xl">
+        Loading your cart...
+      </div>
+    )
+
+  if (error)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-600 font-semibold text-lg">
+        {error}
+      </div>
+    )
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      {/* Changed heading color to Deep Blue for theme consistency */}
       <h1 className="text-4xl font-extrabold text-green-800 mb-8">
         🛒 Your Shopping Cart
       </h1>
@@ -60,11 +124,10 @@ export default function Cart() {
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Cart Items Table (70% width on large screens) */}
+          {/* --- CART TABLE --- */}
           <div className="lg:w-3/4 overflow-x-auto bg-white rounded-xl shadow-2xl p-4">
             <table className="min-w-full">
               <thead>
-                {/* Updated header background to Deep Blue */}
                 <tr className="bg-green-800 text-white text-left text-sm uppercase tracking-wider">
                   <th className="py-3 px-4 rounded-tl-xl">Product</th>
                   <th className="py-3 px-4 text-center">Price</th>
@@ -85,8 +148,6 @@ export default function Cart() {
                     <td className="py-4 px-4 text-center text-gray-600">
                       Rs. {item.price.toFixed(2)}
                     </td>
-
-                    {/* Quantity Controls */}
                     <td className="py-4 px-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <button
@@ -111,15 +172,13 @@ export default function Cart() {
                         </button>
                       </div>
                     </td>
-
                     <td className="py-4 px-4 text-center font-semibold text-gray-700">
                       Rs. {(item.price * item.quantity).toFixed(2)}
                     </td>
-
                     <td className="py-4 px-4 text-center">
                       <button
                         onClick={() => removeItem(item.id)}
-                        className="text-red-800 hover:text-red-800 transition text-sm font-medium"
+                        className="text-red-800 hover:text-red-600 transition text-sm font-medium"
                       >
                         Remove
                       </button>
@@ -130,13 +189,11 @@ export default function Cart() {
             </table>
           </div>
 
-          {/* Order Summary Card (30% width on large screens) */}
+          {/* --- ORDER SUMMARY --- */}
           <div className="lg:w-1/4 bg-white p-6 rounded-xl shadow-2xl h-fit">
-            {/* Changed title color to Deep Blue for theme consistency */}
             <h3 className="text-2xl font-bold text-green-800 mb-4 border-b pb-2">
               Order Summary
             </h3>
-
             <div className="space-y-3 mb-6">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal:</span>
@@ -146,14 +203,12 @@ export default function Cart() {
                 <span>Shipping:</span>
                 <span>Rs. {shippingFee.toFixed(2)}</span>
               </div>
-              {/* Changed total color to Deep Blue for theme consistency */}
               <div className="flex justify-between text-xl font-bold pt-2 border-t border-gray-200 text-red-800">
                 <span>Order Total:</span>
                 <span>Rs. {total.toFixed(2)}</span>
               </div>
             </div>
 
-            {/* Checkout Button - Mint Green */}
             <button className="w-full bg-green-800 text-white font-semibold text-lg px-6 py-3 rounded-lg shadow-lg hover:bg-green-600 transition duration-300 ease-in-out">
               Proceed to Checkout
             </button>

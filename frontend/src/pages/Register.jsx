@@ -1,7 +1,46 @@
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import axios from "axios"
+import { authService } from "../utils/auth"
 import groceryImg from "../assets/grocery1.png"
 
 export default function Register() {
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    try {
+      const response = await axios.post(
+        "http://localhost:5000/api/auth/register",
+        {
+          name,
+          email,
+          password,
+        }
+      )
+
+      // Save token and user info
+      authService.setAuth(response.data.token, response.data.user)
+
+      // Redirect to products page
+      navigate("/products")
+    } catch (err) {
+      setError(
+        err.response?.data?.msg || "Registration failed. Please try again."
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen bg-white-100">
       {/* Left Image Panel */}
@@ -23,39 +62,62 @@ export default function Register() {
             Sign Up
           </h2>
 
-          <form className="space-y-4">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-gray-700">Full Name</label>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Full Name
+              </label>
               <input
                 type="text"
                 placeholder="Enter your full name"
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
 
             <div>
-              <label className="block text-gray-700">Email</label>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Email
+              </label>
               <input
                 type="email"
                 placeholder="Enter your email"
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
 
             <div>
-              <label className="block text-gray-700">Password</label>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Password
+              </label>
               <input
                 type="password"
                 placeholder="Enter your password"
-                className="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-green-600"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition"
+              disabled={loading}
+              className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign Up
+              {loading ? "Signing up..." : "Sign Up"}
             </button>
           </form>
 
