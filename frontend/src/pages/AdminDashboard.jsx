@@ -223,7 +223,7 @@ export default function AdminDashboard() {
       {/* Sidebar */}
       <aside className="w-64 bg-green-700 text-white flex flex-col">
         <div className="p-6 text-2xl font-bold border-b border-green-600">
-          Grocery Admin
+          Admin Dashboard
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => (
@@ -258,7 +258,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <StatCard
                 label="Total Sales"
-                value={`$${stats.totalSales.toFixed(2)}`}
+                value={`Rs.${stats.totalSales.toFixed(2)}`}
               />
               <StatCard label="Orders" value={stats.orderCount} />
               <StatCard label="Products" value={stats.productCount} />
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
                           {order.userId?.name || "Guest"}
                         </td>
                         <td className="py-2 px-4">
-                          ${order.totalAmount?.toFixed(2) || "0.00"}
+                          Rs.{order.totalAmount?.toFixed(2) || "0.00"}
                         </td>
                         <td className="py-2 px-4">
                           <span
@@ -420,7 +420,7 @@ function ProductsView({ products, loading, onAdd, onEdit, onDelete }) {
                   <td className="py-3 px-4 text-gray-600">
                     {product.category}
                   </td>
-                  <td className="py-3 px-4">${product.price.toFixed(2)}</td>
+                  <td className="py-3 px-4">Rs.{product.price.toFixed(2)}</td>
                   <td className="py-3 px-4">{product.stock}</td>
                   <td className="py-3 px-4">
                     <div className="flex gap-2">
@@ -495,7 +495,7 @@ function OrdersView({ orders, loading, onUpdateStatus }) {
                     {order.items?.length || 0} item(s)
                   </td>
                   <td className="py-3 px-4 font-semibold">
-                    ${order.totalAmount?.toFixed(2) || "0.00"}
+                    Rs.{order.totalAmount?.toFixed(2) || "0.00"}
                   </td>
                   <td className="py-3 px-4">
                     <span
@@ -559,6 +559,7 @@ function CustomersView({ customers, loading }) {
               <tr className="bg-green-100 text-left text-green-700">
                 <th className="py-3 px-4">Name</th>
                 <th className="py-3 px-4">Email</th>
+                <th className="py-3 px-4">Phone</th>
                 <th className="py-3 px-4">Role</th>
                 <th className="py-3 px-4">Member Since</th>
               </tr>
@@ -571,6 +572,7 @@ function CustomersView({ customers, loading }) {
                 >
                   <td className="py-3 px-4 font-medium">{customer.name}</td>
                   <td className="py-3 px-4 text-gray-600">{customer.email}</td>
+                  <td className="py-3 px-4 text-gray-600">{customer.phone}</td>
                   <td className="py-3 px-4">
                     <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
                       {customer.role || "customer"}

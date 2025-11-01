@@ -8,6 +8,7 @@ export default function Register() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [phone, setPhone] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -24,6 +25,7 @@ export default function Register() {
           name,
           email,
           password,
+          phone,
         }
       )
 
@@ -57,7 +59,7 @@ export default function Register() {
 
       {/* Right Form Panel */}
       <div className="flex w-full md:w-1/2 items-center justify-center bg-white-100 p-8">
-        <div className="bg-white p-16 rounded-2xl shadow-2xl w-full max-w-md transform transition duration-300 hover:scale-[1.01]">
+        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md transform transition duration-300 hover:scale-[1.01]">
           <h2 className="text-3xl font-bold text-green-600 mb-8 text-center">
             Sign Up
           </h2>
@@ -94,6 +96,23 @@ export default function Register() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Phone
+              </label>
+              <input
+                type="phone"
+                placeholder="Enter your phone number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
+                pattern="^(97|98)[0-9]{8}$"
+                title="Please enter a valid 10-digit phone number starting with 97 or 98"
+                maxLength={10}
+                minLength={10}
               />
             </div>
 

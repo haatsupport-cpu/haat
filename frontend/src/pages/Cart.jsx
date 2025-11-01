@@ -38,7 +38,7 @@ export default function Cart() {
   // --- HANDLER FUNCTIONS ---
 
   // Remove item from cart
-  const removeItem = async (id) => {
+  const removeItem = async (item) => {
     try {
       const userId = authService.getUserId()
       if (!userId) {
@@ -46,8 +46,10 @@ export default function Cart() {
         return
       }
 
+      // Use cartItemId if available, otherwise use product id
+      const itemId = item.cartItemId || item.id
       const response = await axios.delete(
-        `http://localhost:5000/api/cart/${id}?userId=${userId}`
+        `http://localhost:5000/api/cart/${itemId}?userId=${userId}`
       )
       // Backend returns updated cart items
       setCartItems(response.data)
@@ -58,7 +60,7 @@ export default function Cart() {
   }
 
   // Update item quantity
-  const updateQuantity = async (id, newQuantity) => {
+  const updateQuantity = async (item, newQuantity) => {
     const finalQuantity = Math.max(1, newQuantity)
 
     try {
@@ -68,10 +70,15 @@ export default function Cart() {
         return
       }
 
-      const response = await axios.put(`http://localhost:5000/api/cart/${id}`, {
-        userId,
-        quantity: finalQuantity,
-      })
+      // Use cartItemId if available, otherwise use product id
+      const itemId = item.cartItemId || item.id
+      const response = await axios.put(
+        `http://localhost:5000/api/cart/${itemId}`,
+        {
+          userId,
+          quantity: finalQuantity,
+        }
+      )
       // Backend returns updated cart items
       setCartItems(response.data)
     } catch (err) {
@@ -152,7 +159,7 @@ export default function Cart() {
                       <div className="flex items-center justify-center space-x-2">
                         <button
                           onClick={() =>
-                            updateQuantity(item.id, item.quantity - 1)
+                            updateQuantity(item, item.quantity - 1)
                           }
                           className="text-gray-600 border border-gray-300 w-8 h-8 rounded hover:bg-gray-200 transition"
                           disabled={item.quantity === 1}
@@ -164,7 +171,7 @@ export default function Cart() {
                         </span>
                         <button
                           onClick={() =>
-                            updateQuantity(item.id, item.quantity + 1)
+                            updateQuantity(item, item.quantity + 1)
                           }
                           className="text-gray-600 border border-gray-300 w-8 h-8 rounded hover:bg-gray-200 transition"
                         >
@@ -177,7 +184,7 @@ export default function Cart() {
                     </td>
                     <td className="py-4 px-4 text-center">
                       <button
-                        onClick={() => removeItem(item.id)}
+                        onClick={() => removeItem(item)}
                         className="text-red-800 hover:text-red-600 transition text-sm font-medium"
                       >
                         Remove

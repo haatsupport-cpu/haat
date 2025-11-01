@@ -16,7 +16,7 @@ const ProductCard = ({ product, onAddToCart }) => {
 
   return (
     <div
-      key={product._id}
+      key={product.id || product._id}
       className="bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-100 hover:border-green-400 transition duration-300 transform hover:scale-[1.02] relative"
     >
       {/* Tag */}
@@ -37,7 +37,11 @@ const ProductCard = ({ product, onAddToCart }) => {
       {/* Image */}
       <div className="h-40 w-full overflow-hidden bg-gray-200 flex items-center justify-center">
         <img
-          src={product.image || "https://placehold.co/400x250?text=No+Image"}
+          src={
+            product.imageUrl ||
+            product.image ||
+            "https://placehold.co/400x250?text=No+Image"
+          }
           alt={product.name}
           className="w-full h-full object-cover"
           onError={(e) => {
@@ -59,7 +63,7 @@ const ProductCard = ({ product, onAddToCart }) => {
         <p className="text-3xl font-extrabold text-green-600 mb-4">
           Rs. {product.price?.toFixed(2)}
           <span className="text-sm font-medium text-gray-500 ml-1">
-            /{product.unit}
+            /{product.unit || "kg"}
           </span>
         </p>
 
@@ -147,7 +151,7 @@ export default function Products() {
 
       await axios.post("http://localhost:5000/api/cart", {
         userId,
-        productId: product._id,
+        productId: product.id || product._id,
         quantity,
       })
 
@@ -203,7 +207,7 @@ export default function Products() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
         {products.map((product) => (
           <ProductCard
-            key={product._id}
+            key={product.id || product._id}
             product={product}
             onAddToCart={handleAddToCart}
           />
