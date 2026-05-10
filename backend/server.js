@@ -2,9 +2,14 @@ import express from "express"
 import dotenv from "dotenv"
 import mongoose from "mongoose"
 import cors from "cors"
+import dns from "node:dns"
 
 dotenv.config()
 const app = express()
+
+// Some networks block SRV lookups on local DNS.
+// Force public resolvers for mongodb+srv hostname discovery.
+dns.setServers(["8.8.8.8", "1.1.1.1"])
 
 app.use(express.json())
 app.use(cors())

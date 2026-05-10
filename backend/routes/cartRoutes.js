@@ -4,6 +4,21 @@ import Product from "../models/Product.js"
 
 const router = express.Router()
 
+// Helper function to transform cart items to frontend format
+const transformCartItems = (items) => {
+  return items.map((item) => ({
+    id: item.product._id || item.product.id,
+    cartItemId: item._id,
+    name: item.product.name,
+    price: item.product.price,
+    quantity: item.quantity,
+    imageUrl: item.product.image || item.product.imageUrl || "",
+    unit: item.product.unit || "kg",
+    tag: item.product.tag || "",
+    category: item.product.category || "",
+  }))
+}
+
 // ✅ Get cart (simple endpoint - requires userId in query)
 router.get("/", async (req, res) => {
   try {
@@ -16,15 +31,7 @@ router.get("/", async (req, res) => {
       return res.json([])
     }
     // Transform to frontend format
-    const items = cart.items.map((item) => ({
-      id: item.product._id,
-      cartItemId: item._id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      imageUrl: item.product.image || "",
-      unit: "kg",
-    }))
+    const items = transformCartItems(cart.items)
     res.json(items)
   } catch (err) {
     res.status(500).json({ message: "Error fetching cart", error: err.message })
@@ -41,15 +48,7 @@ router.get("/:userId", async (req, res) => {
       return res.json([])
     }
     // Transform to frontend format
-    const items = cart.items.map((item) => ({
-      id: item.product._id,
-      cartItemId: item._id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      imageUrl: item.product.image || "",
-      unit: "kg", // Default unit, can be added to product model later
-    }))
+    const items = transformCartItems(cart.items)
     res.json(items)
   } catch (err) {
     res.status(500).json({ message: "Error fetching cart", error: err.message })
@@ -88,17 +87,9 @@ router.post("/", async (req, res) => {
 
     await cart.save()
     const populatedCart = await cart.populate("items.product")
-    
+
     // Transform to frontend format
-    const items = populatedCart.items.map((item) => ({
-      id: item.product._id,
-      cartItemId: item._id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      imageUrl: item.product.image || "",
-      unit: "kg",
-    }))
+    const items = transformCartItems(populatedCart.items)
     res.json(items)
   } catch (err) {
     res
@@ -165,15 +156,7 @@ router.put("/:id", async (req, res) => {
 
     const populatedCart = await cart.populate("items.product")
     // Transform to frontend format
-    const items = populatedCart.items.map((item) => ({
-      id: item.product._id,
-      cartItemId: item._id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      imageUrl: item.product.image || "",
-      unit: "kg",
-    }))
+    const items = transformCartItems(populatedCart.items)
     res.json(items)
   } catch (err) {
     res.status(500).json({ message: "Error updating cart", error: err.message })
@@ -224,15 +207,7 @@ router.delete("/:id", async (req, res) => {
     await cart.save()
     const populatedCart = await cart.populate("items.product")
     // Transform to frontend format
-    const items = populatedCart.items.map((item) => ({
-      id: item.product._id,
-      cartItemId: item._id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      imageUrl: item.product.image || "",
-      unit: "kg",
-    }))
+    const items = transformCartItems(populatedCart.items)
     res.json(items)
   } catch (err) {
     res.status(500).json({ message: "Error removing item", error: err.message })

@@ -12,8 +12,11 @@ export const getProducts = async (req, res) => {
       category: product.category,
       stock: product.stock,
       imageUrl: product.image || "",
+      image: product.image || "",
       icon: "", // Default empty, can be added to product model later
-      unit: "kg", // Default unit, can be added to product model later
+      unit: product.unit || "kg",
+      tag: product.tag || "",
+      description: product.description || "",
     }))
     res.json(transformedProducts)
   } catch (err) {
@@ -24,8 +27,17 @@ export const getProducts = async (req, res) => {
 // Add new product
 export const createProduct = async (req, res) => {
   try {
-    const { name, category, price, stock, image } = req.body
-    const newProduct = new Product({ name, category, price, stock, image })
+    const { name, category, price, stock, image, unit, tag, description } = req.body
+    const newProduct = new Product({ 
+      name, 
+      category, 
+      price, 
+      stock, 
+      image,
+      unit: unit || "kg",
+      tag: tag || "Fresh",
+      description: description || "",
+    })
     await newProduct.save()
     
     // Return the created product with transformed format
@@ -38,8 +50,11 @@ export const createProduct = async (req, res) => {
         category: newProduct.category,
         stock: newProduct.stock,
         imageUrl: newProduct.image || "",
+        image: newProduct.image || "",
         icon: "",
-        unit: "kg",
+        unit: newProduct.unit || "kg",
+        tag: newProduct.tag || "",
+        description: newProduct.description || "",
       },
     })
   } catch (err) {

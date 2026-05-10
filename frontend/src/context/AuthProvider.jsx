@@ -1,15 +1,15 @@
 import React, { useState } from "react"
 import { AuthContext } from "./AuthContext"
+import { authService } from "../utils/auth"
 
 // Context Provider
 export const AuthProvider = ({ children }) => {
   // Try to load user and token from localStorage on initial load
   const [user, setUser] = useState(() => {
-    const storedUser = localStorage.getItem("user")
-    return storedUser ? JSON.parse(storedUser) : null
+    return authService.getUser()
   })
 
-  const [token, setToken] = useState(localStorage.getItem("token"))
+  const [token, setToken] = useState(authService.getToken())
 
   const isLoggedIn = !!user
   const isAdmin = user?.role === "admin"
@@ -17,15 +17,15 @@ export const AuthProvider = ({ children }) => {
   const login = (userData, jwtToken) => {
     setUser(userData)
     setToken(jwtToken)
-    localStorage.setItem("user", JSON.stringify(userData))
-    localStorage.setItem("token", jwtToken)
+    authService.setAuth(jwtToken, userData)
   }
 
   // handle logout
   const logout = () => {
     setUser(null)
     setToken(null)
-    localStorage.removeItem("user")
+    authService.clearAuth()
+    // Remove legacy key used in old auth flow.
     localStorage.removeItem("token")
   }
 

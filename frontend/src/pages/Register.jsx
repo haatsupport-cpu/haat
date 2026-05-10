@@ -1,8 +1,23 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import axios from "axios"
-import { authService } from "../utils/auth"
+import { motion as Motion } from "framer-motion"
+import {
+  ShoppingBasket,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  ArrowRight,
+} from "lucide-react"
+
+import { signInWithPopup } from "firebase/auth"
+import { auth, provider } from "../firebase"
+
+import { useAuth } from "../context/useAuth"
 import groceryImg from "../assets/grocery1.png"
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
 
 export default function Register() {
   const [name, setName] = useState("")
@@ -11,16 +26,22 @@ export default function Register() {
   const [phone, setPhone] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
 
+  const navigate = useNavigate()
+  const { login } = useAuth()
+
+  // =========================
+  // Normal Register
+  // =========================
   const handleSubmit = async (e) => {
     e.preventDefault()
+
     setError("")
     setLoading(true)
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/auth/register",
+        `${API_BASE_URL}/api/auth/register`,
         {
           name,
           email,
@@ -29,124 +50,314 @@ export default function Register() {
         }
       )
 
-      // Save token and user info
-      authService.setAuth(response.data.token, response.data.user)
+      login(response.data.user, response.data.token)
 
-      // Redirect to products page
       navigate("/products")
     } catch (err) {
       setError(
-        err.response?.data?.msg || "Registration failed. Please try again."
+        err.response?.data?.msg ||
+          "Registration failed. Please try again."
       )
     } finally {
       setLoading(false)
     }
   }
 
+  // =========================
+  // Google Register/Login
+  // =========================
+  const handleGoogleSignup = async () => {
+    try {
+      setError("")
+      setLoading(true)
+
+      const result = await signInWithPopup(auth, provider)
+
+      const googleUser = {
+        name: result.user.displayName,
+        email: result.user.email,
+        photo: result.user.photoURL,
+        googleId: result.user.uid,
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/auth/google`,
+        googleUser
+      )
+
+      login(response.data.user, response.data.token)
+      navigate("/products")
+    } catch (err) {
+      setError(err.response?.data?.msg || "Google signup failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex h-screen w-screen bg-white-100">
-      {/* Left Image Panel */}
-      <div
-        className="hidden md:flex w-1/2 bg-cover bg-center"
-        style={{ backgroundImage: `url(${groceryImg})` }}
-      >
-        <div className="w-full p-10 text-center">
-          <h1 className="text-green-600 text-3xl font-extrabold px-4">
-            Fresh groceries delivered to your doorstep
-          </h1>
+    <div className="min-h-screen flex bg-[#f8faf7] overflow-hidden">
+      {/* ================= LEFT SIDE ================= */}
+      <div className="hidden lg:flex relative w-1/2 overflow-hidden">
+        {/* Background */}
+        <img
+          src={groceryImg}
+          alt="Fresh Groceries"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-green-900/80 via-green-800/70 to-black/60" />
+
+        {/* Blur Effects */}
+        <div className="absolute top-10 left-10 w-72 h-72 bg-lime-300/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-10 right-10 w-72 h-72 bg-green-400/20 rounded-full blur-3xl" />
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-between p-14 text-white w-full">
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl">
+              <ShoppingBasket className="w-7 h-7" />
+            </div>
+
+            <h1 className="text-3xl font-black tracking-tight">
+              HaatOnline
+            </h1>
+          </div>
+
+          {/* Hero */}
+          <div className="max-w-lg">
+            <Motion.h2
+              initial={{ opacity: 0, y: 35 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+              className="text-5xl font-black leading-tight mb-6"
+            >
+              Join Nepal’s modern online Haat Bazaar.
+            </Motion.h2>
+
+            <p className="text-lg text-green-50/90 leading-relaxed">
+              Fresh vegetables, groceries, and local products
+              delivered quickly from trusted local sellers.
+            </p>
+          </div>
+
+          {/* Stats */}
+          <div className="flex gap-8">
+            <div>
+              <h3 className="text-3xl font-bold">5K+</h3>
+              <p className="text-sm text-green-100">
+                Happy Customers
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-3xl font-bold">100+</h3>
+              <p className="text-sm text-green-100">
+                Local Sellers
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-3xl font-bold">24/7</h3>
+              <p className="text-sm text-green-100">
+                Fast Delivery
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Right Form Panel */}
-      <div className="flex w-full md:w-1/2 items-center justify-center bg-white-100 p-8">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md transform transition duration-300 hover:scale-[1.01]">
-          <h2 className="text-3xl font-bold text-green-600 mb-8 text-center">
-            Sign Up
-          </h2>
+      {/* ================= RIGHT SIDE ================= */}
+      <div className="flex w-full lg:w-1/2 items-center justify-center px-6 py-10 relative">
+        {/* Glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-green-200/30 blur-3xl rounded-full" />
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <label className="block text-gray-700 mb-2 font-medium">
-                Full Name
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
+        <Motion.div
+          initial={{ opacity: 0, y: 35 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="relative z-10 w-full max-w-md"
+        >
+          {/* Card */}
+          <div className="bg-white/80 backdrop-blur-2xl border border-white/50 shadow-2xl rounded-[2rem] p-8 md:p-10">
+            {/* Mobile Logo */}
+            <div className="lg:hidden flex justify-center mb-6">
+              <div className="bg-green-100 p-4 rounded-2xl">
+                <ShoppingBasket className="w-8 h-8 text-green-600" />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-gray-700 mb-2 font-medium">
-                Email
-              </label>
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700 mb-2 font-medium">
-                Phone
-              </label>
-              <input
-                type="phone"
-                placeholder="Enter your phone number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-                pattern="^(97|98)[0-9]{8}$"
-                title="Please enter a valid 10-digit phone number starting with 97 or 98"
-                maxLength={10}
-                minLength={10}
-              />
+            {/* Heading */}
+            <div className="text-center mb-8">
+              <h2 className="text-4xl font-black text-gray-800 mb-3">
+                Create Account 🚀
+              </h2>
+
+              <p className="text-gray-500">
+                Sign up to start shopping fresh groceries.
+              </p>
             </div>
 
-            <div>
-              <label className="block text-gray-700 mb-2 font-medium">
-                Password
-              </label>
-              <input
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-            </div>
+            {/* Error */}
+            {error && (
+              <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                {error}
+              </div>
+            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            {/* Form */}
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-5"
             >
-              {loading ? "Signing up..." : "Sign Up"}
-            </button>
-          </form>
+              {/* Name */}
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Full Name
+                </label>
 
-          <p className="mt-4 text-center text-gray-600">
-            Already have an account?{" "}
-            <Link to="/login" className="text-green-600 hover:underline">
-              Login
-            </Link>
-          </p>
-        </div>
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+
+                  <input
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) =>
+                      setName(e.target.value)
+                    }
+                    required
+                    className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Email Address
+                </label>
+
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) =>
+                      setEmail(e.target.value)
+                    }
+                    required
+                    className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Phone Number
+                </label>
+
+                <div className="relative">
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+
+                  <input
+                    type="tel"
+                    placeholder="98XXXXXXXX"
+                    value={phone}
+                    onChange={(e) =>
+                      setPhone(e.target.value)
+                    }
+                    required
+                    pattern="^(97|98)[0-9]{8}$"
+                    title="Enter valid Nepali number"
+                    maxLength={10}
+                    minLength={10}
+                    className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Password
+                </label>
+
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) =>
+                      setPassword(e.target.value)
+                    }
+                    required
+                    minLength={6}
+                    className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="group w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl font-semibold shadow-lg transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  "Creating account..."
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-8">
+              <div className="border-t border-gray-200" />
+
+              <span className="absolute left-1/2 -translate-x-1/2 -top-3 bg-white px-4 text-sm text-gray-400">
+                OR
+              </span>
+            </div>
+
+            {/* Google Button */}
+            <button
+              type="button"
+              onClick={handleGoogleSignup}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 border border-gray-200 hover:border-green-400 py-4 rounded-2xl font-medium text-gray-700 transition-all duration-300 bg-white hover:bg-green-50"
+            >
+              <img
+                src="https://www.svgrepo.com/show/475656/google-color.svg"
+                alt="Google"
+                className="w-5 h-5"
+              />
+
+              Continue with Google
+            </button>
+
+            {/* Footer */}
+            <p className="mt-8 text-center text-gray-500">
+              Already have an account?{" "}
+              <Link
+                to="/login"
+                className="text-green-600 font-semibold hover:text-green-700"
+              >
+                Login
+              </Link>
+            </p>
+          </div>
+        </Motion.div>
       </div>
     </div>
   )

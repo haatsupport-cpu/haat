@@ -11,11 +11,13 @@
     "tailwindcss": "npx tailwindcss -i ./src/index.css -o ./dist/output.css --watch"
   },
   "dependencies": {
-    "axios": "^1.13.1",
+    "axios": "^1.16.0",
+    "firebase": "^12.13.0",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.5"
+    "react-router-dom": "^7.15.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
