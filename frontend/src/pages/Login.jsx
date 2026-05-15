@@ -1,129 +1,122 @@
-import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import axios from "axios"
-import { motion as Motion } from "framer-motion"
-import {
-  ShoppingBasket,
-  Mail,
-  Lock,
-  ArrowRight,
-} from "lucide-react"
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion as Motion } from "framer-motion";
+import { Mail, Lock, ArrowRight } from "lucide-react";
 
-import { signInWithPopup } from "firebase/auth"
-import { auth, provider } from "../firebase"
+import { supabase } from "../supabaseClient";
 
-import { useAuth } from "../context/useAuth"
-import groceryImg from "../assets/grocery1.png"
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000"
+import groceryImg from "../assets/grocery1.png";
+import logoImg from "../assets/logo1.png";
 
 export default function Login() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const navigate = useNavigate()
-  const { login } = useAuth()
+  const navigate = useNavigate();
+  // Role-based navigation handled via profiles fetch in this page
 
-  // =========================
-  // Email Password Login
-  // =========================
+  useEffect(() => {
+    // after OAuth redirect, session will be restored by supabase auth client,
+    // navigate based on role.
+    const run = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (profile?.role === "admin") navigate("/admin");
+      else navigate("/products");
+    };
+    run().catch(() => {});
+    
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    setError("")
-    setLoading(true)
+    setError("");
+    setLoading(true);
 
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/auth/login`,
-        {
-          email,
-          password,
-        }
-      )
+      const { data, error: signErr } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      login(response.data.user, response.data.token)
+      if (signErr) throw signErr;
 
-      if (response.data.user.role === "admin") {
-        navigate("/admin")
-      } else {
-        navigate("/products")
-      }
+      const {
+        data: { session },
+      } = data;
+
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (profileErr) throw profileErr;
+
+      if (profile?.role === "admin") navigate("/admin");
+      else navigate("/products");
     } catch (err) {
-      setError(
-        err.response?.data?.msg ||
-          "Login failed. Please check your credentials."
-      )
+      setError(err?.message || "Login failed. Please check your credentials.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  // =========================
-  // Google Login
-  // =========================
   const handleGoogleLogin = async () => {
     try {
-      setError("")
-      setLoading(true)
+      setError("");
+      setLoading(true);
 
-      const result = await signInWithPopup(auth, provider)
+      // Prefer Supabase OAuth redirect flow.
+      // Configure Supabase OAuth provider callback URL in Supabase settings.
+      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/login`,
+        },
+      });
 
-      const googleUser = {
-        name: result.user.displayName,
-        email: result.user.email,
-        photo: result.user.photoURL,
-        googleId: result.user.uid,
-      }
+      if (oauthErr) throw oauthErr;
 
-      const response = await axios.post(
-        `${API_BASE_URL}/api/auth/google`,
-        googleUser
-      )
-
-      login(response.data.user, response.data.token)
-      navigate("/products")
+      
     } catch (err) {
-      setError(err.response?.data?.msg || "Google login failed")
+      setError(err?.message || "Google login failed");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex bg-[#f8faf7] overflow-hidden">
-      {/* ================= LEFT SIDE ================= */}
       <div className="hidden lg:flex relative w-1/2 overflow-hidden">
-        {/* Background Image */}
         <img
           src={groceryImg}
           alt="Fresh Groceries"
           className="absolute inset-0 h-full w-full object-cover"
         />
-
-        {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-green-900/80 via-green-800/70 to-black/60" />
-
-        {/* Blur Effects */}
         <div className="absolute top-10 left-10 w-72 h-72 bg-lime-300/20 rounded-full blur-3xl" />
         <div className="absolute bottom-10 right-10 w-72 h-72 bg-green-400/20 rounded-full blur-3xl" />
 
-        {/* Content */}
         <div className="relative z-10 flex flex-col justify-between p-14 text-white w-full">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl">
-              <ShoppingBasket className="w-7 h-7" />
-            </div>
-
-            <h1 className="text-3xl font-black tracking-tight">
-              HaatOnline
-            </h1>
+          <div className="flex items-center w-full">
+            <img
+              src={logoImg}
+              alt="HaatOnline"
+              className="h-20 w-auto sm:h-24 md:h-28 lg:h-32 max-w-full object-contain object-left drop-shadow-lg"
+            />
           </div>
 
-          {/* Hero Text */}
           <div className="max-w-lg">
             <Motion.h2
               initial={{ opacity: 0, y: 35 }}
@@ -135,40 +128,29 @@ export default function Login() {
             </Motion.h2>
 
             <p className="text-lg text-green-50/90 leading-relaxed">
-              Order vegetables, fruits, groceries, and local
-              products directly from your trusted Haat Bazaar.
+              Order vegetables, fruits, groceries, and local products directly
+              from your trusted Haat Bazaar.
             </p>
           </div>
 
-          {/* Stats */}
           <div className="flex gap-8">
             <div>
               <h3 className="text-3xl font-bold">5K+</h3>
-              <p className="text-sm text-green-100">
-                Happy Customers
-              </p>
+              <p className="text-sm text-green-100">Happy Customers</p>
             </div>
-
             <div>
               <h3 className="text-3xl font-bold">100+</h3>
-              <p className="text-sm text-green-100">
-                Local Sellers
-              </p>
+              <p className="text-sm text-green-100">Local Sellers</p>
             </div>
-
             <div>
               <h3 className="text-3xl font-bold">24/7</h3>
-              <p className="text-sm text-green-100">
-                Fast Support
-              </p>
+              <p className="text-sm text-green-100">Fast Support</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ================= RIGHT SIDE ================= */}
       <div className="flex w-full lg:w-1/2 items-center justify-center px-6 py-10 relative">
-        {/* Glow */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-green-200/30 blur-3xl rounded-full" />
 
         <Motion.div
@@ -177,80 +159,65 @@ export default function Login() {
           transition={{ duration: 0.6 }}
           className="relative z-10 w-full max-w-md"
         >
-          {/* Card */}
           <div className="bg-white/80 backdrop-blur-2xl border border-white/50 shadow-2xl rounded-[2rem] p-8 md:p-10">
-            {/* Mobile Logo */}
-            <div className="lg:hidden flex justify-center mb-6">
-              <div className="bg-green-100 p-4 rounded-2xl">
-                <ShoppingBasket className="w-8 h-8 text-green-600" />
-              </div>
+            <div className="lg:hidden flex justify-center mb-6 px-2">
+              <img
+                src={logoImg}
+                alt="HaatOnline"
+                className="h-20 w-auto max-w-[min(100%,20rem)] sm:h-24 object-contain"
+              />
             </div>
 
-            {/* Heading */}
             <div className="text-center mb-8">
               <h2 className="text-4xl font-black text-gray-800 mb-3">
                 Welcome Back 👋
               </h2>
-
               <p className="text-gray-500">
                 Login to continue shopping fresh groceries.
               </p>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-sm">
                 {error}
               </div>
             )}
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Email */}
               <div>
                 <label className="text-sm font-semibold text-gray-700 mb-2 block">
                   Email Address
                 </label>
-
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-
                   <input
                     type="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(e) =>
-                      setEmail(e.target.value)
-                    }
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                     className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
                   />
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="text-sm font-semibold text-gray-700 mb-2 block">
                   Password
                 </label>
-
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) =>
-                      setPassword(e.target.value)
-                    }
+                    onChange={(e) => setPassword(e.target.value)}
                     required
                     className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
                   />
                 </div>
               </div>
 
-              {/* Forgot Password */}
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -260,7 +227,6 @@ export default function Login() {
                 </button>
               </div>
 
-              {/* Login Button */}
               <button
                 type="submit"
                 disabled={loading}
@@ -277,16 +243,13 @@ export default function Login() {
               </button>
             </form>
 
-            {/* Divider */}
             <div className="relative my-8">
               <div className="border-t border-gray-200" />
-
               <span className="absolute left-1/2 -translate-x-1/2 -top-3 bg-white px-4 text-sm text-gray-400">
                 OR
               </span>
             </div>
 
-            {/* Google Button */}
             <button
               type="button"
               onClick={handleGoogleLogin}
@@ -298,11 +261,9 @@ export default function Login() {
                 alt="Google"
                 className="w-5 h-5"
               />
-
               Continue with Google
             </button>
 
-            {/* Footer */}
             <p className="mt-8 text-center text-gray-500">
               Don’t have an account?{" "}
               <Link
@@ -316,5 +277,5 @@ export default function Login() {
         </Motion.div>
       </div>
     </div>
-  )
+  );
 }

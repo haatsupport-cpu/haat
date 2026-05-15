@@ -1,74 +1,67 @@
 import { Link } from "react-router-dom";
-import { ShoppingBasket } from "lucide-react";
 import { useAuth } from "../context/useAuth";
+import logoImg from "../assets/logo1.png";
 
 export default function Navbar() {
   const { isLoggedIn, isAdmin, logout } = useAuth();
 
   return (
-    <nav className="sticky top-0 z-50 backdrop-blur-lg bg-white/80 border-b border-gray-200 shadow-sm">
-      <div className="container mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-        
-        {/* Logo */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-2xl font-black text-green-700"
-        >
-          <div className="bg-green-600 text-white p-2 rounded-xl shadow-md">
-            <ShoppingBasket className="w-5 h-5" />
-          </div>
+    <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
+      <div className="container mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
 
-          <span>HaatOnline</span>
+        {/* Logo */}
+        <Link to="/" className="flex items-center">
+          <img
+            src={logoImg}
+            alt="HaatOnline"
+            className="h-16 md:h-20 w-auto object-contain"
+          />
         </Link>
 
-        {/* Nav Links */}
-        <div className="flex items-center gap-3 sm:gap-5 text-sm sm:text-base font-medium">
+        {/* Navigation */}
+        <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base font-medium">
+
           <Link
             to="/"
-            className="hover:text-green-700 transition-colors duration-200"
+            className="hover:text-green-700 transition"
           >
             Home
           </Link>
 
           <Link
             to="/products"
-            className="hover:text-green-700 transition-colors duration-200"
+            className="hover:text-green-700 transition"
           >
             Products
           </Link>
 
           <Link
             to="/cart"
-            className="hover:text-green-700 transition-colors duration-200"
+            className="hover:text-green-700 transition"
           >
             Cart
           </Link>
 
-          {/* Admin Dashboard */}
           {isLoggedIn && isAdmin && (
             <Link
               to="/admin"
-              className="hover:text-green-700 transition-colors duration-200"
+              className="hover:text-green-700 transition"
             >
               Dashboard
             </Link>
           )}
 
-          {/* Login */}
-          {!isLoggedIn && (
+          {!isLoggedIn ? (
             <Link
               to="/login"
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl transition-all duration-200 shadow-md"
+              className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl shadow-md transition"
             >
               Login
             </Link>
-          )}
-
-          {/* Logout */}
-          {isLoggedIn && (
+          ) : (
             <button
               onClick={logout}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl transition-all duration-200 shadow-md"
+              className="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl shadow-md transition"
             >
               Logout
             </button>

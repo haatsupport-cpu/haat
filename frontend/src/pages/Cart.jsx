@@ -1,57 +1,55 @@
 import { useState, useEffect } from "react"
-import axios from "axios"
 import { Link } from "react-router-dom"
-import { authService } from "../utils/auth"
+import { useAuth } from "../context/useAuth"
+import { axiosClient } from "../utils/axiosClient"
 
 export default function Cart() {
+  const { user, loading: authLoading } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // --- FETCH CART DATA FROM BACKEND ---
-  useEffect(() => {
-    const fetchCart = async () => {
-      try {
-        setLoading(true)
-        const userId = authService.getUserId()
-        if (!userId) {
-          setError("Please login to view your cart")
-          setLoading(false)
-          return
-        }
+  const fetchCart = async () => {
+    try {
+      setLoading(true)
 
-        const response = await axios.get(
-          `http://localhost:5000/api/cart?userId=${userId}`
-        )
-        setCartItems(response.data)
-      } catch (err) {
-        console.error("Error fetching cart:", err)
-        setError("Failed to load cart. Please try again later.")
-      } finally {
-        setLoading(false)
+      if (!user?.id) {
+        setError("Please login to view your cart")
+        return
       }
+
+      const response = await axiosClient.get(`/api/cart?userId=${user.id}`)
+      setCartItems(response.data)
+    } catch (err) {
+      console.error("Error fetching cart:", err)
+      setError("Failed to load cart. Please try again later.")
+    } finally {
+      setLoading(false)
     }
+  }
 
-    fetchCart()
-  }, [])
+  useEffect(() => {
+    if (!authLoading) {
+      fetchCart()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id])
 
-  // --- HANDLER FUNCTIONS ---
-
-  // Remove item from cart
   const removeItem = async (item) => {
     try {
-      const userId = authService.getUserId()
-      if (!userId) {
+      setError(null)
+
+      if (!user?.id) {
         alert("Please login to modify cart")
         return
       }
 
-      // Use cartItemId if available, otherwise use product id
+      const userId = user.id
       const itemId = item.cartItemId || item.id
-      const response = await axios.delete(
-        `http://localhost:5000/api/cart/${itemId}?userId=${userId}`
+
+      const response = await axiosClient.delete(
+        `/api/cart/${itemId}?userId=${userId}`
       )
-      // Backend returns updated cart items
       setCartItems(response.data)
     } catch (err) {
       console.error("Failed to remove item:", err)
@@ -59,27 +57,26 @@ export default function Cart() {
     }
   }
 
-  // Update item quantity
   const updateQuantity = async (item, newQuantity) => {
     const finalQuantity = Math.max(1, newQuantity)
 
     try {
-      const userId = authService.getUserId()
-      if (!userId) {
+      if (!user?.id) {
         alert("Please login to modify cart")
         return
       }
 
-      // Use cartItemId if available, otherwise use product id
+      const userId = user.id
       const itemId = item.cartItemId || item.id
-      const response = await axios.put(
-        `http://localhost:5000/api/cart/${itemId}`,
+
+      const response = await axiosClient.put(
+        `/api/cart/${itemId}`,
         {
           userId,
           quantity: finalQuantity,
         }
       )
-      // Backend returns updated cart items
+
       setCartItems(response.data)
     } catch (err) {
       console.error("Failed to update quantity:", err)
@@ -87,15 +84,12 @@ export default function Cart() {
     }
   }
 
-  // Calculate totals
   const subtotal = cartItems.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   )
   const shippingFee = subtotal > 0 ? 100.0 : 0
   const total = subtotal + shippingFee
-
-  // --- RENDER ---
 
   if (loading)
     return (
@@ -131,7 +125,6 @@ export default function Cart() {
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* --- CART TABLE --- */}
           <div className="lg:w-3/4 overflow-x-auto bg-white rounded-xl shadow-2xl p-4">
             <table className="min-w-full">
               <thead>
@@ -158,9 +151,7 @@ export default function Cart() {
                     <td className="py-4 px-4 text-center">
                       <div className="flex items-center justify-center space-x-2">
                         <button
-                          onClick={() =>
-                            updateQuantity(item, item.quantity - 1)
-                          }
+                          onClick={() => updateQuantity(item, item.quantity - 1)}
                           className="text-gray-600 border border-gray-300 w-8 h-8 rounded hover:bg-gray-200 transition"
                           disabled={item.quantity === 1}
                         >
@@ -170,9 +161,7 @@ export default function Cart() {
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() =>
-                            updateQuantity(item, item.quantity + 1)
-                          }
+                          onClick={() => updateQuantity(item, item.quantity + 1)}
                           className="text-gray-600 border border-gray-300 w-8 h-8 rounded hover:bg-gray-200 transition"
                         >
                           +
@@ -196,7 +185,6 @@ export default function Cart() {
             </table>
           </div>
 
-          {/* --- ORDER SUMMARY --- */}
           <div className="lg:w-1/4 bg-white p-6 rounded-xl shadow-2xl h-fit">
             <h3 className="text-2xl font-bold text-green-800 mb-4 border-b pb-2">
               Order Summary

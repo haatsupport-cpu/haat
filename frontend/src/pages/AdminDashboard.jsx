@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import axios from "axios"
+import { axiosClient } from "../utils/axiosClient"
 import {
   LayoutDashboard,
   Package,
@@ -55,9 +55,9 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const statsRes = await axios.get("http://localhost:5000/api/admin/stats")
-      const ordersRes = await axios.get(
-        "http://localhost:5000/api/admin/recent-orders"
+      const statsRes = await axiosClient.get("/api/admin/stats")
+      const ordersRes = await axiosClient.get(
+        "/api/admin/recent-orders"
       )
       setStats(statsRes.data)
       setRecentOrders(ordersRes.data)
@@ -69,7 +69,7 @@ export default function AdminDashboard() {
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await axios.get("http://localhost:5000/api/products")
+      const response = await axiosClient.get("/api/products")
       setProducts(response.data)
     } catch (error) {
       console.error("Error fetching products:", error)
@@ -81,7 +81,7 @@ export default function AdminDashboard() {
   const fetchOrders = async () => {
     try {
       setLoading(true)
-      const response = await axios.get("http://localhost:5000/api/orders")
+      const response = await axiosClient.get("/api/orders")
       setOrders(response.data)
     } catch (error) {
       console.error("Error fetching orders:", error)
@@ -93,8 +93,8 @@ export default function AdminDashboard() {
   const fetchCustomers = async () => {
     try {
       setLoading(true)
-      const response = await axios.get(
-        "http://localhost:5000/api/admin/customers"
+      const response = await axiosClient.get(
+        "/api/admin/customers"
       )
       setCustomers(response.data)
     } catch (error) {
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
         image: productForm.image,
       }
 
-      await axios.post("http://localhost:5000/api/products", productData)
+      await axiosClient.post("/api/products", productData)
       setShowAddProductModal(false)
       resetProductForm()
       fetchProducts()
@@ -138,8 +138,8 @@ export default function AdminDashboard() {
         image: productForm.image,
       }
 
-      await axios.put(
-        `http://localhost:5000/api/products/${editingProduct.id}`,
+      await axiosClient.put(
+        `/api/products/${editingProduct.id}`,
         productData
       )
       setShowAddProductModal(false)
@@ -157,7 +157,7 @@ export default function AdminDashboard() {
     if (!confirm("Are you sure you want to delete this product?")) return
 
     try {
-      await axios.delete(`http://localhost:5000/api/products/${id}`)
+      await axiosClient.delete(`/api/products/${id}`)
       fetchProducts()
       fetchDashboardData() // Update stats
       alert("Product deleted successfully!")
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
 
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
-      await axios.put(`http://localhost:5000/api/orders/${orderId}`, {
+      await axiosClient.put(`/api/orders/${orderId}`, {
         status: newStatus,
       })
       fetchOrders()

@@ -1,89 +1,100 @@
-import express from "express"
-import dotenv from "dotenv"
-import mongoose from "mongoose"
-import cors from "cors"
-import dns from "node:dns"
+import "./env.js";
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import compression from "compression";
+import cookieParser from "cookie-parser";
 
-dotenv.config()
-const app = express()
+const app = express();
 
-// Some networks block SRV lookups on local DNS.
-// Force public resolvers for mongodb+srv hostname discovery.
-dns.setServers(["8.8.8.8", "1.1.1.1"])
+const {
+  PORT = "5000",
+  FRONTEND_URL = "http://localhost:5173",
+  SUPABASE_URL,
+  NODE_ENV = "development",
+} = process.env;
 
-app.use(express.json())
-app.use(cors())
+const allowedOrigins = [
+  FRONTEND_URL,
+  // Helpful for local dev variants
+  "http://localhost:5173",
+  "http://localhost:3000",
+].filter(Boolean);
 
-// Routes
-import authRoutes from "./routes/authRoutes.js"
-import productRoutes from "./routes/productRoutes.js"
-import orderRoutes from "./routes/orderRoutes.js"
-import adminRoutes from "./routes/adminRoutes.js"
-import cartRoutes from "./routes/cartRoutes.js"
+// Production-safe CORS: no wildcard with credentials, handle preflight
+app.use(
+  cors({
+    origin(origin, callback) {
+      // allow REST/health checks (no origin) and same-origin
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("CORS origin not allowed"), false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+    maxAge: 86400,
+  })
+);
 
-app.use("/api/auth", authRoutes)
-app.use("/api/products", productRoutes)
-app.use("/api/orders", orderRoutes)
-app.use("/api/admin", adminRoutes)
-app.use("/api/cart", cartRoutes)
+// Security headers
+app.use(helmet());
 
-// MongoDB Connection
-const connectDB = async () => {
-  try {
-    if (!process.env.MONGO_URI) {
-      throw new Error("MONGO_URI is not defined in environment variables")
-    }
+// Compression
+app.use(compression());
 
-    // Use the connection string as-is, specify database name in options
-    const mongoURI = process.env.MONGO_URI.trim()
+// JSON parsing
+app.use(express.json({ limit: "1mb" }));
 
-    // Log connection info (hide credentials)
-    const safeURI = mongoURI.replace(/\/\/[^:]+:[^@]+@/, "//***:***@")
-    console.log(`🔗 Connecting to MongoDB: ${safeURI}`)
-    console.log(`📦 Using database: grocery-shop`)
+// Cookie parsing 
+app.use(cookieParser());
 
-    const conn = await mongoose.connect(mongoURI, {
-      // Modern MongoDB driver options
-      serverSelectionTimeoutMS: 10000, // Timeout after 10s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      minPoolSize: 5, // Maintain at least 5 socket connections
-      dbName: "grocery-shop", // Explicitly specify database name
-    })
+// Rate limiting (per IP)
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: NODE_ENV === "production" ? 300 : 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
 
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`)
-    console.log(`📦 Database: ${conn.connection.name}`)
+// Routes 
+import authRoutes from "./routes/authRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
 
-    // Handle connection events
-    mongoose.connection.on("error", (err) => {
-      console.error("❌ MongoDB connection error:", err)
-    })
+app.get("/healthz", (req, res) => res.json({ ok: true }));
 
-    mongoose.connection.on("disconnected", () => {
-      console.log("⚠️ MongoDB disconnected. Attempting to reconnect...")
-    })
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/cart", cartRoutes);
 
-    mongoose.connection.on("reconnected", () => {
-      console.log("✅ MongoDB reconnected")
-    })
+// Centralized 404
+app.use((req, res) => {
+  res.status(404).json({ message: "Not found" });
+});
 
-    // Graceful shutdown
-    process.on("SIGINT", async () => {
-      await mongoose.connection.close()
-      console.log("MongoDB connection closed through app termination")
-      process.exit(0)
-    })
-  } catch (error) {
-    console.error(`❌ Error connecting to MongoDB: ${error.message}`)
-    console.error(
-      "Make sure MongoDB is running and MONGO_URI is correct in .env file"
-    )
-    process.exit(1)
-  }
-}
+// Centralized error handler
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.statusCode || 500;
+  const message = err.message || "Internal server error";
+  res.status(status).json({ message });
+});
 
-// Connect to MongoDB before starting the server
-connectDB()
-
-const PORT = process.env.PORT || 5000
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+const port = Number(PORT);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  if (SUPABASE_URL) console.log("Supabase configured.");
+});
