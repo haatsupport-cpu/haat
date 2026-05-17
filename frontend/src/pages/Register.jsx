@@ -8,8 +8,8 @@ import {
   Phone,
   ArrowRight,
 } from "lucide-react"
-
-import { supabase } from "../supabaseClient"
+import { useAuth } from "../context/useAuth"
+import axiosClient from "../utils/axiosClient";
 
 import groceryImg from "../assets/grocery1.png"
 import logoImg from "../assets/logo.png"
@@ -23,21 +23,13 @@ export default function Register() {
   const [loading, setLoading] = useState(false)
 
   const navigate = useNavigate()
+  const { setUser } = useAuth()
   // role-based redirect is handled inside gotoByRole()
 
-  const gotoByRole = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return navigate("/login")
-
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", session.user.id)
-      .maybeSingle()
-
-    if (profileErr) return navigate("/products")
-    if (profile?.role === "admin") navigate("/admin")
-    else navigate("/products")
+  const gotoByRole = async (user) => {
+    if (!user) return navigate("/login");
+    if (user.role === "admin") navigate("/admin");
+    else navigate("/products");
   }
 
   // Email/Password Register
@@ -52,27 +44,22 @@ export default function Register() {
       if (!name) return setError("Name is required")
       if (!phone) return setError("Phone is required")
 
-      const { data, error: signUpErr } = await supabase.auth.signUp({
+      const response = await axiosClient.post("/auth/register", {
+        name,
         email,
         password,
-        options: {
-          data: {
-            full_name: name,
-            phone,
-            provider: "local",
-          },
-        },
+        phone,
       })
 
-      if (signUpErr) throw signUpErr
-
-      if (data.session) {
-        await gotoByRole()
-      } else {
-        setError(
-          "Check your email to confirm your account, then log in."
-        )
+      const user = response?.data?.user
+      const token = response?.data?.token
+      if (!user || !token) {
+        throw new Error("Registration failed")
       }
+
+      window.localStorage.setItem("haatonline_auth_token", token)
+      setUser(user)
+      await gotoByRole(user)
     } catch (err) {
       setError(err?.message || "Registration failed. Please try again.")
     } finally {
@@ -80,27 +67,9 @@ export default function Register() {
     }
   }
 
-  // Google Register/Login (OAuth)
-  
-  const handleGoogleSignup = async () => {
-    try {
-      setError("")
-      setLoading(true)
-
-      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/login`,
-        },
-      })
-
-      if (oauthErr) throw oauthErr
-
-    } catch (err) {
-      setError(err?.message || "Google signup failed")
-    } finally {
-      setLoading(false)
-    }
+  // Google Register/Login is not available in the local auth flow yet.
+  const handleGoogleSignup = () => {
+    setError("Google signup is not available in the local auth flow yet.")
   }
 
   return (

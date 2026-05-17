@@ -1,23 +1,18 @@
-import express from "express"
+import express from "express";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import { requireAuth, requireVendorOrAdmin } from "../middleware/auth.js";
 import {
   getProducts,
   createProduct,
   updateProduct,
   deleteProduct,
-} from "../controllers/productController.js"
+} from "../controllers/productController.js";
 
-const router = express.Router()
+const router = express.Router();
 
-// GET all products
-router.get("/", getProducts)
+router.get("/", asyncHandler(getProducts));
+router.post("/", requireAuth, requireVendorOrAdmin, asyncHandler(createProduct));
+router.put("/:id", requireAuth, requireVendorOrAdmin, asyncHandler(updateProduct));
+router.delete("/:id", requireAuth, requireVendorOrAdmin, asyncHandler(deleteProduct));
 
-// POST a new product
-router.post("/", createProduct)
-
-// PUT update product
-router.put("/:id", updateProduct)
-
-// DELETE product
-router.delete("/:id", deleteProduct)
-
-export default router
+export default router;

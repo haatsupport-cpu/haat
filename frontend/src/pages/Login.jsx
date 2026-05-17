@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 
-import { supabase } from "../supabaseClient";
+import axiosClient from "../utils/axiosClient";
+import { useAuth } from "../context/useAuth";
 
 import groceryImg from "../assets/grocery1.png";
 import logoImg from "../assets/logo1.png";
@@ -17,25 +18,23 @@ export default function Login() {
   const navigate = useNavigate();
   // Role-based navigation handled via profiles fetch in this page
 
+  const { setUser } = useAuth();
   useEffect(() => {
-    // after OAuth redirect, session will be restored by supabase auth client,
-    // navigate based on role.
     const run = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      if (profile?.role === "admin") navigate("/admin");
-      else navigate("/products");
+      try {
+        const response = await axiosClient.get("/auth/me");
+        if (response?.data?.user) {
+          const role = response.data.user.role;
+          setUser(response.data.user);
+          if (role === "admin") navigate("/admin");
+          else navigate("/products");
+        }
+      } catch {
+        // ignore
+      }
     };
-    run().catch(() => {});
-    
-  }, [navigate]);
+    run();
+  }, [navigate, setUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,56 +43,26 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const { data, error: signErr } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const response = await axiosClient.post("/auth/login", { email, password });
+      const user = response.data?.user;
+      const token = response.data?.token;
+      if (!user || !token) {
+        throw new Error("Login failed");
+      }
 
-      if (signErr) throw signErr;
-
-      const {
-        data: { session },
-      } = data;
-
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      if (profileErr) throw profileErr;
-
-      if (profile?.role === "admin") navigate("/admin");
+      window.localStorage.setItem("haatonline_auth_token", token);
+      setUser(user);
+      if (user.role === "admin") navigate("/admin");
       else navigate("/products");
     } catch (err) {
-      setError(err?.message || "Login failed. Please check your credentials.");
+      setError(err.response?.data?.message || err.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      setError("");
-      setLoading(true);
-
-      // Prefer Supabase OAuth redirect flow.
-      // Configure Supabase OAuth provider callback URL in Supabase settings.
-      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/login`,
-        },
-      });
-
-      if (oauthErr) throw oauthErr;
-
-      
-    } catch (err) {
-      setError(err?.message || "Google login failed");
-    } finally {
-      setLoading(false);
-    }
+    setError("Google login is not available in the local auth flow yet.");
   };
 
   return (

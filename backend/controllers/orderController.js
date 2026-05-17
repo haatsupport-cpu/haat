@@ -1,127 +1,138 @@
-import { supabaseFromRequest } from "../supabase/supabaseClient.js";
+import mongoose from "mongoose";
+import Order from "../models/Order.js";
+import Product from "../models/Product.js";
+import Cart from "../models/Cart.js";
+import { generateOrderNumber } from "../utils/orderGenerator.js";
 
-const getAccessTokenFromReq = (req) => {
-  const header = req.headers.authorization || "";
-  return header.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
+const parseNumeric = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
-function requireUserFromToken(supabase, req, res) {
- 
-  return supabase.auth
-    .getUser()
-    .then(({ data, error }) => {
-      if (error || !data?.user) {
-        res.status(401).json({ msg: "Unauthorized" });
-        return null;
-      }
-      return data.user;
+const buildLineItems = async (items, session) => {
+  const converted = [];
+
+  for (const item of items) {
+    const productId = item.productId ?? item.product_id ?? item.id;
+    const quantity = Number(item.quantity ?? item.qty ?? 1);
+
+    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error("Invalid order item format");
+    }
+
+    const product = await Product.findById(productId).session(session);
+    if (!product || !product.isActive) {
+      const err = new Error("Product not found or unavailable");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (product.stock < quantity) {
+      const err = new Error(`Not enough stock for ${product.name}`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    converted.push({
+      productId: product._id,
+      name: product.name,
+      quantity,
+      unitPrice: product.price,
+      total: product.price * quantity,
+      imageUrl: product.imageUrl ?? "",
+      category: product.category?.toString() ?? "",
+      vendorId: product.vendor?.toString() ?? null,
     });
-}
+  }
+
+  return converted;
+};
 
 export const createOrder = async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-    const { userId, items, totalAmount } = req.body;
+    const userId = req.user.id;
+    const { items, totalAmount } = req.body;
 
-    if (!userId || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ msg: "userId and items are required" });
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Order items are required" });
     }
 
-    // Token auth:
-    const accessToken = getAccessTokenFromReq(req);
-    const supabase = supabaseFromRequest(accessToken);
-    if (!supabase || !accessToken) return res.status(401).json({ msg: "Unauthorized" });
+    const subtotal = parseNumeric(totalAmount?.subtotal ?? totalAmount?.sub_total ?? 0);
+    const tax = parseNumeric(totalAmount?.tax ?? 0);
+    const shipping = parseNumeric(totalAmount?.shipping ?? 0);
+    const total = parseNumeric(totalAmount?.total_amount ?? subtotal + tax + shipping);
 
-    const authUser = await requireUserFromToken(supabase, req, res);
-    if (!authUser) return;
-
-    if (authUser.id !== userId) {
-      return res.status(403).json({ msg: "Forbidden" });
-    }
-
-    // Transaction-safe flow 
-    const subtotal = Number(totalAmount?.subtotal ?? totalAmount?.sub_total ?? totalAmount ?? 0);
-    const tax = Number(totalAmount?.tax ?? 0);
-    const shipping = Number(totalAmount?.shipping ?? 0);
-    const totalAmountNum = Number(
-      totalAmount?.total_amount ??
-        totalAmount?.totalAmount ??
-        subtotal + tax + shipping
-    );
-
-    const rpcItems = items.map((it) => ({
-      product_id: it.productId ?? it.product_id ?? it.id,
-      productId: it.productId ?? it.product_id ?? it.id,
-      quantity: Number(it.quantity),
-    }));
-
-    const { data: rpcData, error: rpcErr } = await supabase.rpc(
-      "place_order_and_deduct_inventory",
-      {
-        p_user_id: userId,
-        p_address_id: req.body.addressId ?? null,
-        p_items: rpcItems,
-        p_totals: {
-          subtotal: Number.isFinite(subtotal) ? subtotal : 0,
-          tax: Number.isFinite(tax) ? tax : 0,
-          shipping: Number.isFinite(shipping) ? shipping : 0,
-          total_amount: Number.isFinite(totalAmountNum) ? totalAmountNum : 0,
+    session.startTransaction();
+    const lineItems = await buildLineItems(items, session);
+    const order = await Order.create(
+      [
+        {
+          userId,
+          customerName: req.body.customerName ?? req.user.name,
+          customerPhone: req.body.customerPhone ?? "",
+          deliveryAddress: req.body.deliveryAddress ?? "",
+          landmark: req.body.landmark ?? "",
+          deliveryType: req.body.deliveryType ?? "instant",
+          scheduledDeliveryAt: req.body.scheduledDeliveryAt ? new Date(req.body.scheduledDeliveryAt) : null,
+          paymentMode: req.body.paymentMode ?? "unknown",
+          promoCodeId: req.body.promoCodeId || null,
+          promoDiscount: parseNumeric(req.body.promoDiscount ?? 0),
+          deliveryFee: parseNumeric(req.body.deliveryFee ?? 0),
+          codFee: parseNumeric(req.body.codFee ?? 0),
+          subtotal: Number.isFinite(subtotal) ? subtotal : lineItems.reduce((sum, item) => sum + item.total, 0),
+          totalAmount: Number.isFinite(total) ? total : lineItems.reduce((sum, item) => sum + item.total, 0),
+          status: "pending",
+          orderNumber: generateOrderNumber(),
+          items: lineItems,
         },
-      }
+      ],
+      { session }
     );
 
-    if (rpcErr) return res.status(400).json({ msg: rpcErr.message });
+    for (const item of lineItems) {
+      await Product.updateOne(
+        { _id: item.productId, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity } },
+        { session }
+      );
+    }
 
-    const orderId = Array.isArray(rpcData)
-      ? rpcData?.[0]?.order_id ?? rpcData?.[0]?.id
-      : rpcData?.order_id;
+    const activeCart = await Cart.findOne({ user: userId, isActive: true }).session(session);
+    if (activeCart) {
+      activeCart.items = [];
+      await activeCart.save({ session });
+    }
 
-    return res.status(201).json({
-      msg: "Order placed successfully",
-      orderId,
-    });
+    await session.commitTransaction();
+    const createdOrder = order[0];
+    return res.status(201).json({ message: "Order placed successfully", orderId: createdOrder._id.toString() });
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    await session.abortTransaction();
+    return res.status(err.statusCode || 500).json({ message: "Failed to place order", details: err.message });
+  } finally {
+    session.endSession();
   }
 };
 
 export const getOrders = async (req, res) => {
   try {
-    const accessToken = getAccessTokenFromReq(req);
-    const supabase = supabaseFromRequest(accessToken);
+    const orders = await Order.find({ userId: req.user.id })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    //  no token, return empty 
-    if (!supabase || !accessToken) return res.json([]);
-
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !auth?.user) return res.status(401).json({ msg: "Unauthorized" });
-
-    const { data: orders, error } = await supabase
-      .from("orders")
-      .select("id,user_id,address_id,status,subtotal,tax,shipping,total_amount,placed_at,created_at")
-      .eq("user_id", auth.user.id)
-      .order("placed_at", { ascending: false });
-
-    if (error) return res.status(500).json({ msg: error.message });
-
-    // Fetch order items + join product snapshot fields
-    const orderIds = (orders ?? []).map((o) => o.id);
-    let itemsByOrder = new Map();
-    if (orderIds.length) {
-      const { data: itemsRows, error: itemsErr } = await supabase
-        .from("order_items")
-        .select("order_id, product_id, product_name, quantity, unit, unit_price, line_total, created_at")
-        .in("order_id", orderIds);
-
-      if (itemsErr) return res.status(500).json({ msg: itemsErr.message });
-
-      itemsByOrder = new Map((itemsRows ?? []).map((r) => [r.order_id, r]));
-    }
-
-    return res.json({
-      orders: orders ?? [],
-    });
+    return res.json(
+      orders.map((order) => ({
+        id: order._id.toString(),
+        user_id: order.userId.toString(),
+        status: order.status,
+        total_amount: order.totalAmount,
+        placed_at: order.createdAt,
+        created_at: order.createdAt,
+      }))
+    );
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to fetch orders", details: err.message });
   }
 };
 
@@ -130,32 +141,17 @@ export const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const accessToken = getAccessTokenFromReq(req);
-    const supabase = supabaseFromRequest(accessToken);
-    if (!supabase || !accessToken) return res.status(401).json({ msg: "Unauthorized" });
+    if (!status) {
+      return res.status(400).json({ message: "Order status is required" });
+    }
 
-    // Admin only
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !auth?.user) return res.status(401).json({ msg: "Unauthorized" });
+    const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", auth.user.id)
-      .maybeSingle();
-
-    if (profileErr) return res.status(500).json({ msg: profileErr.message });
-    if (profile?.role !== "admin") return res.status(403).json({ msg: "Admin only" });
-
-    const { error: updErr } = await supabase
-      .from("orders")
-      .update({ status })
-      .eq("id", id);
-
-    if (updErr) return res.status(500).json({ msg: updErr.message });
-
-    return res.json({ msg: "Order status updated successfully" });
+    return res.json({ message: "Order status updated successfully" });
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to update order status", details: err.message });
   }
 };

@@ -1,19 +1,16 @@
-import express from "express"
+import express from "express";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
   createOrder,
   getOrders,
   updateOrderStatus,
-} from "../controllers/orderController.js"
+} from "../controllers/orderController.js";
 
-const router = express.Router()
+const router = express.Router();
 
-// POST create order
-router.post("/", createOrder)
+router.post("/", requireAuth, asyncHandler(createOrder));
+router.get("/", requireAuth, asyncHandler(getOrders));
+router.put("/:id", requireAuth, requireRole("admin"), asyncHandler(updateOrderStatus));
 
-// GET all orders
-router.get("/", getOrders)
-
-// PUT update order status
-router.put("/:id", updateOrderStatus)
-
-export default router
+export default router;

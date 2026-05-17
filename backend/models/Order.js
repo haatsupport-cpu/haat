@@ -1,17 +1,51 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
-const orderSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  items: [
-    {
-      productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-      quantity: Number,
-      price: Number,
+const orderItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
     },
-  ],
-  totalAmount: Number,
-  status: { type: String, default: "pending" },
-  date: { type: Date, default: Date.now },
-})
+    name: { type: String, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+    unitPrice: { type: Number, required: true, min: 0 },
+    total: { type: Number, required: true, min: 0 },
+    imageUrl: { type: String, default: "" },
+    category: { type: String, default: "" },
+    vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  },
+  { _id: false }
+);
 
-export default mongoose.model("Order", orderSchema)
+const orderSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    customerName: { type: String, required: true, trim: true },
+    customerPhone: { type: String, required: true, trim: true },
+    deliveryAddress: { type: String, required: true, trim: true },
+    landmark: { type: String, required: true, trim: true },
+    deliveryType: { type: String, enum: ["instant", "scheduled"], default: "instant" },
+    scheduledDeliveryAt: { type: Date, default: null },
+    paymentMode: { type: String, required: true, trim: true },
+    promoCodeId: { type: mongoose.Schema.Types.ObjectId, ref: "PromoCode", default: null },
+    promoDiscount: { type: Number, default: 0, min: 0 },
+    deliveryFee: { type: Number, default: 0, min: 0 },
+    codFee: { type: Number, default: 0, min: 0 },
+    subtotal: { type: Number, default: 0, min: 0 },
+    totalAmount: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      enum: ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+      default: "pending",
+    },
+    orderNumber: { type: String, required: true, unique: true },
+    items: [orderItemSchema],
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("Order", orderSchema);

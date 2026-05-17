@@ -1,13 +1,19 @@
-import express from "express"
+import express from "express";
+import { validateBody } from "../middleware/validateBody.js";
+import { requireAuth } from "../middleware/auth.js";
 import {
   registerUser,
   loginUser,
   googleAuthUser,
-} from "../controllers/authController.js"
-const router = express.Router()
+  getCurrentUser,
+  logoutUser,
+} from "../controllers/authController.js";
+const router = express.Router();
 
-router.post("/register", registerUser)
-router.post("/login", loginUser)
-router.post("/google", googleAuthUser)
+router.post("/register", validateBody(["name", "email", "password"]), registerUser);
+router.post("/login", validateBody(["email", "password"]), loginUser);
+router.post("/google", validateBody(["accessToken"]), googleAuthUser);
+router.get("/me", requireAuth, getCurrentUser);
+router.post("/logout", logoutUser);
 
-export default router
+export default router;

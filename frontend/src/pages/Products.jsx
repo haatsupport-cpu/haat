@@ -84,7 +84,7 @@ export default function Products() {
         <h1 className="text-5xl font-black text-green-700 tracking-tight">
           HaatOnline 🛒
         </h1>
-        <p className="text-lg text-gray-600 mt-2">Haat Bazar, Now Online!</p>
+        <p className="text-lg text-gray-600 mt-2">सबै Groceries, घर बसी बसी</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">

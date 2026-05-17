@@ -11,7 +11,6 @@
     "tailwindcss": "npx tailwindcss -i ./src/index.css -o ./dist/output.css --watch"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.16.0",
     "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",

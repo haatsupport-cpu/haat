@@ -1,86 +1,61 @@
 import bcrypt from "bcryptjs";
-import { supabaseAdmin, supabaseFromRequest } from "../supabase/supabaseClient.js";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
+const buildUserResponse = (user) => ({
+  id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  phone: user.phone,
+  photo: user.photo,
+  authProvider: user.authProvider,
+});
 
+const createToken = (user) => {
+  const token = jwt.sign(
+    {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+  return token;
+};
 
-function buildUserResponse(profile, user) {
-  return {
-    id: user.id,
-    name: profile?.full_name ?? user.user_metadata?.full_name ?? "",
-    email: user.email,
-    role: profile?.role ?? "customer",
-    phone: profile?.phone ?? null,
-    photo: profile?.photo_url ?? null,
-    authProvider: user.user_metadata?.provider ?? "unknown",
-  };
-}
+const respondError = (res, status, message, details) =>
+  res.status(status).json({ message, details });
 
-async function getProfileByAuthUserId(userId) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("id, full_name, phone, photo_url, role")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}
-
-export const registerUser = async (req, res, next) => {
+export const registerUser = async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ msg: "name, email and password are required" });
+      return respondError(res, 400, "name, email and password are required");
     }
 
-    // creates the auth.users row
-    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: name,
-        provider: "local",
-      },
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return respondError(res, 409, "A user with this email already exists");
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      phone: phone ? phone.trim() : null,
+      authProvider: "local",
     });
 
-    if (createError) return res.status(400).json({ msg: createError.message });
-
-    // Create/ensure public.profiles row
-    const userId = created.user.id;
-
-    const profilePayload = {
-      id: userId,
-      full_name: name,
-      phone: phone ?? null,
-      photo_url: null,
-      role: "customer",
-    };
-
-    const { error: profileError } = await supabaseAdmin.from("profiles").upsert(profilePayload, { onConflict: "id" });
-    if (profileError) return res.status(500).json({ msg: profileError.message });
-
-    const user = created.user;
-    const profile = await getProfileByAuthUserId(userId);
-
-    //  access token to frontend.
-    
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) return res.status(400).json({ msg: signInError.message });
-
-    const accessToken = signInData.session.access_token;
-
-    return res.status(201).json({
-      token: accessToken,
-      user: buildUserResponse(profile, user),
-    });
+    const token = createToken(user);
+    return res.status(201).json({ token, user: buildUserResponse(user) });
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    console.error("[AUTH][REGISTER] unexpected error", err);
+    return respondError(res, 500, "Registration failed", err.message);
   }
 };
 
@@ -89,88 +64,101 @@ export const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ msg: "email and password are required" });
+      return respondError(res, 400, "email and password are required");
     }
 
-    // Supabase Auth sign in
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
 
-    if (error) return res.status(400).json({ msg: error.message });
-
-    const user = data.user;
-    const profile = await getProfileByAuthUserId(user.id);
-
-    if (!profile) {
-      // if missing, create minimal profile
-      const { error: upsertError } = await supabaseAdmin.from("profiles").upsert(
-        {
-          id: user.id,
-          full_name: user.user_metadata?.full_name ?? "",
-          phone: null,
-          photo_url: null,
-          role: "customer",
-        },
-        { onConflict: "id" }
-      );
-      if (upsertError) return res.status(500).json({ msg: upsertError.message });
+    if (!user || !user.password) {
+      return respondError(res, 401, "Invalid credentials");
     }
 
-    return res.json({
-      token: data.session.access_token,
-      user: buildUserResponse(profile, user),
-    });
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return respondError(res, 401, "Invalid credentials");
+    }
+
+    const token = createToken(user);
+    return res.json({ token, user: buildUserResponse(user) });
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    console.error("[AUTH][LOGIN] unexpected error", err);
+    return respondError(res, 500, "Login failed", err.message);
   }
+};
+
+const verifyGoogleIdToken = async (idToken) => {
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  if (!googleClientId) {
+    throw new Error("GOOGLE_CLIENT_ID is required for Google login");
+  }
+
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Invalid Google ID token");
+  }
+
+  const payload = await response.json();
+  if (payload.aud !== googleClientId) {
+    throw new Error("Google ID token audience mismatch");
+  }
+
+  return payload;
 };
 
 export const googleAuthUser = async (req, res) => {
   try {
-    
-    const { accessToken, name, email } = req.body;
+    const { idToken } = req.body;
+    if (!idToken) {
+      return respondError(res, 400, "Google login requires an ID token");
+    }
 
-    if (!accessToken) {
-      // legacy fallback: 
-      return res.status(400).json({
-        msg: "Google login requires Supabase access token. Please migrate frontend to send accessToken.",
+    const payload = await verifyGoogleIdToken(idToken);
+    const email = payload.email?.toLowerCase()?.trim();
+    if (!email) {
+      return respondError(res, 400, "Google token did not include an email");
+    }
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        name: payload.name || payload.email.split("@")[0],
+        email,
+        googleId: payload.sub,
+        photo: payload.picture || null,
+        authProvider: "google",
       });
+    } else if (user.authProvider === "local" && !user.googleId) {
+      user.googleId = payload.sub;
+      user.photo = user.photo || payload.picture || null;
+      user.authProvider = "google";
+      await user.save();
     }
 
-    // Verify access token and get auth user
-    const { data: verified, error: verifyError } = await supabaseAdmin.auth.getUser(accessToken);
-
-    if (verifyError || !verified?.user) {
-      return res.status(401).json({ msg: "Invalid Google access token" });
-    }
-
-    const user = verified.user;
-    const profile = await getProfileByAuthUserId(user.id);
-
-    if (!profile) {
-      const { error: upsertError } = await supabaseAdmin.from("profiles").upsert(
-        {
-          id: user.id,
-          full_name: name ?? user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "",
-          phone: null,
-          photo_url: user.user_metadata?.avatar_url ?? null,
-          role: "customer",
-        },
-        { onConflict: "id" }
-      );
-
-      if (upsertError) return res.status(500).json({ msg: upsertError.message });
-    }
-
-    const finalProfile = await getProfileByAuthUserId(user.id);
-
-    return res.json({
-      token: accessToken,
-      user: buildUserResponse(finalProfile, user),
-    });
+    const token = createToken(user);
+    return res.json({ token, user: buildUserResponse(user) });
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    console.error("[AUTH][GOOGLE] unexpected error", err);
+    return respondError(res, 500, "Google auth failed", err.message);
   }
+};
+
+export const getCurrentUser = async (req, res) => {
+  if (!req.user) {
+    return res.status(200).json({ user: null });
+  }
+
+  const user = await User.findById(req.user.id).lean();
+  if (!user) {
+    return res.status(200).json({ user: null });
+  }
+
+  return res.json({ user: buildUserResponse(user) });
+};
+
+export const logoutUser = async (req, res) => {
+  return res.json({ message: "Logout successful" });
 };

@@ -1,194 +1,118 @@
-import { supabaseFromRequest } from "../supabase/supabaseClient.js";
+import Product from "../models/Product.js";
 
-const transformProduct = (row) => ({
-  id: row.id,
-  name: row.name,
-  price: row.price,
-  category: row.category_id,
-  stock: row.stock,
-  imageUrl: row.image_url ?? "",
-  image: row.image_url ?? "",
-  icon: "",
-  unit: row.unit ?? "kg",
-  tag: row.tag ?? "",
-  description: row.description ?? "",
+const transformProduct = (product) => ({
+  id: product._id.toString(),
+  name: product.name,
+  description: product.description ?? "",
+  price: product.price,
+  stock: product.stock,
+  category_id: product.category?.toString() ?? null,
+  categoryId: product.category?.toString() ?? null,
+  vendor_id: product.vendor?.toString() ?? null,
+  vendorId: product.vendor?.toString() ?? null,
+  image_url: product.imageUrl ?? null,
+  imageUrl: product.imageUrl ?? null,
+  is_active: product.isActive,
+  isActive: product.isActive,
+  created_at: product.createdAt,
+  updated_at: product.updatedAt,
 });
 
 export const getProducts = async (req, res) => {
-  const supabase = supabaseFromRequest(
-    (req.headers.authorization || "").startsWith("Bearer ")
-      ? req.headers.authorization.slice("Bearer ".length)
-      : null
-  );
-
-  // Allow public reads even without token, so we just use anon client if no token.
-  const supabaseClient = supabase ?? supabaseFromRequest(null);
-
   try {
-    const { data, error } = await supabaseClient
-      .from("products")
-      .select("id,name,price,category_id,stock,image_url,unit,tag,description,is_active");
-
-    if (error) return res.status(500).json({ msg: error.message });
-
-    const rows = (data ?? []).filter((r) => r.is_active);
-    return res.json(
-      rows.map((row) => ({
-        ...transformProduct(row),
-       
-        category: row.category_id,
-      }))
-    );
+    const products = await Product.find({ isActive: true }).sort({ createdAt: -1 }).lean();
+    return res.json(products.map(transformProduct));
   } catch (err) {
-    return res.status(500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to load products", details: err.message });
   }
 };
 
-function requireAdminProfileRole(profile) {
-  if (!profile?.role || profile.role !== "admin") {
-    const e = new Error("Admin only");
-    e.statusCode = 403;
-    throw e;
-  }
-}
-
-
 export const createProduct = async (req, res) => {
-  const accessToken = (req.headers.authorization || "").startsWith("Bearer ")
-    ? req.headers.authorization.slice("Bearer ".length)
-    : null;
-
-  const supabase = supabaseFromRequest(accessToken);
-  if (!supabase) return res.status(401).json({ msg: "Missing access token" });
-
   try {
-    const { name, category_id, price, stock, unit, tag, description } = req.body;
+    const { name, category_id, price, stock, image_url, description, is_active, vendor_id } = req.body;
+    const userId = req.user.id;
+    const role = req.user.role;
 
     if (!name || !category_id || price === undefined) {
-      return res
-        .status(400)
-        .json({ msg: "name, category_id and price are required" });
+      return res.status(400).json({ message: "name, category_id and price are required" });
     }
 
-    // Role check 
-    const { data: authUser, error: authUserErr } = await supabase.auth.getUser();
-    if (authUserErr) return res.status(401).json({ msg: authUserErr.message });
+    const ownerId = role === "admin" ? vendor_id ?? userId : userId;
+    if (role === "vendor" && vendor_id && vendor_id !== userId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authUser.user.id)
-      .maybeSingle();
-
-    if (profileErr) return res.status(500).json({ msg: profileErr.message });
-    requireAdminProfileRole(profile);
-
-    const payload = {
-      name,
-      category_id,
-      price,
-      stock: stock ?? 0,
-      unit: unit ?? "kg",
-      tag: tag ?? "Fresh",
+    const product = await Product.create({
+      name: name.trim(),
       description: description ?? "",
-      is_active: true,
-    };
-
-    const { data, error } = await supabase.from("products").insert(payload).select("*").single();
-    if (error) return res.status(400).json({ msg: error.message });
-
-    return res.status(201).json({
-      msg: "Product added successfully",
-      product: {
-        id: data.id,
-        name: data.name,
-        price: data.price,
-        category: data.category_id,
-        stock: data.stock,
-        imageUrl: data.image_url ?? "",
-        image: data.image_url ?? "",
-        icon: "",
-        unit: data.unit ?? "kg",
-        tag: data.tag ?? "",
-        description: data.description ?? "",
-      },
+      price: Number(price),
+      stock: Number(stock ?? 0),
+      category: category_id,
+      vendor: ownerId,
+      imageUrl: image_url ?? "",
+      isActive: is_active !== undefined ? Boolean(is_active) : true,
     });
+
+    return res.status(201).json(transformProduct(product));
   } catch (err) {
-    return res.status(err.statusCode || 500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to create product", details: err.message });
   }
 };
 
 export const updateProduct = async (req, res) => {
-  const accessToken = (req.headers.authorization || "").startsWith("Bearer ")
-    ? req.headers.authorization.slice("Bearer ".length)
-    : null;
-
-  const supabase = supabaseFromRequest(accessToken);
-  if (!supabase) return res.status(401).json({ msg: "Missing access token" });
-
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+    const payload = { ...req.body };
 
-    const { data: authUser, error: authUserErr } = await supabase.auth.getUser();
-    if (authUserErr) return res.status(401).json({ msg: authUserErr.message });
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authUser.user.id)
-      .maybeSingle();
+    if (role === "vendor" && product.vendor?.toString() !== userId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
 
-    if (profileErr) return res.status(500).json({ msg: profileErr.message });
-    requireAdminProfileRole(profile);
+    if (role !== "admin" && payload.vendor_id && payload.vendor_id !== userId) {
+      delete payload.vendor_id;
+    }
 
-    const payload = {
-      ...req.body,
-    };
+    if (payload.name !== undefined) product.name = payload.name;
+    if (payload.description !== undefined) product.description = payload.description;
+    if (payload.price !== undefined) product.price = Number(payload.price);
+    if (payload.stock !== undefined) product.stock = Number(payload.stock);
+    if (payload.category_id !== undefined) product.category = payload.category_id;
+    if (payload.image_url !== undefined) product.imageUrl = payload.image_url;
+    if (payload.is_active !== undefined) product.isActive = Boolean(payload.is_active);
+    if (role === "admin" && payload.vendor_id !== undefined) product.vendor = payload.vendor_id;
 
-    const { data, error } = await supabase
-      .from("products")
-      .update(payload)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
-
-    if (error) return res.status(400).json({ msg: error.message });
-    if (!data) return res.status(404).json({ msg: "Product not found" });
-
-    return res.json({ msg: "Product updated successfully" });
+    await product.save();
+    return res.json(transformProduct(product));
   } catch (err) {
-    return res.status(err.statusCode || 500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to update product", details: err.message });
   }
 };
 
 export const deleteProduct = async (req, res) => {
-  const accessToken = (req.headers.authorization || "").startsWith("Bearer ")
-    ? req.headers.authorization.slice("Bearer ".length)
-    : null;
-
-  const supabase = supabaseFromRequest(accessToken);
-  if (!supabase) return res.status(401).json({ msg: "Missing access token" });
-
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
 
-    const { data: authUser, error: authUserErr } = await supabase.auth.getUser();
-    if (authUserErr) return res.status(401).json({ msg: authUserErr.message });
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authUser.user.id)
-      .maybeSingle();
+    if (role === "vendor" && product.vendor?.toString() !== userId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
 
-    if (profileErr) return res.status(500).json({ msg: profileErr.message });
-    requireAdminProfileRole(profile);
-
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) return res.status(400).json({ msg: error.message });
-
-    return res.json({ msg: "Product deleted successfully" });
+    await product.deleteOne();
+    return res.json({ message: "Product deleted successfully" });
   } catch (err) {
-    return res.status(err.statusCode || 500).json({ msg: err.message });
+    return res.status(500).json({ message: "Failed to delete product", details: err.message });
   }
 };
