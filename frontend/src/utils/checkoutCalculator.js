@@ -1,57 +1,54 @@
 // frontend/src/utils/checkoutCalculator.js
-// Frontend utility for checkout calculations (mirrors backend logic)
-
-const DELIVERY_CONFIG = {
-  INSTANT: {
-    baseFee: 50,
-    nightSurcharge: 150,
-  },
+export const DELIVERY_CONFIG = {
   SCHEDULED: {
-    baseFee: 40,
-    nightSurcharge: 40,
+    timeSlots: [
+      {
+        id: "morning",
+        label: "Morning",
+        startHour: 9,
+      },
+      {
+        id: "afternoon",
+        label: "Afternoon",
+        startHour: 13,
+      },
+      {
+        id: "evening",
+        label: "Evening",
+        startHour: 17,
+      },
+    ],
   },
-  COD_FEE: 10,
-  NIGHT_START_HOUR: 22, // 10 PM
-  NIGHT_END_HOUR: 3, // 3 AM
-};
+}
 
-/**
- * Check if time is within night surcharge hours
- */
-export const isNightTime = (datetime = null) => {
-  const date = datetime ? new Date(datetime) : new Date();
-  const hour = date.getHours();
-  return hour >= DELIVERY_CONFIG.NIGHT_START_HOUR || hour < DELIVERY_CONFIG.NIGHT_END_HOUR;
-};
+export const isNightTime = () => {
+  const hour = new Date().getHours()
 
-/**
- * Calculate delivery fee
- */
-export const calculateDeliveryFee = (deliveryType, deliveryDateTime = null) => {
-  if (deliveryType === "instant") {
-    const checkTime = deliveryDateTime || new Date();
-    return isNightTime(checkTime)
-      ? DELIVERY_CONFIG.INSTANT.baseFee + DELIVERY_CONFIG.INSTANT.nightSurcharge
-      : DELIVERY_CONFIG.INSTANT.baseFee;
-  }
-  return DELIVERY_CONFIG.SCHEDULED.baseFee;
-};
+  return hour >= 20 || hour < 6
+}
 
-/**
- * Calculate total with all charges
- */
+export const calculateDeliveryFee = (
+  subtotal = 0
+) => {
+  if (subtotal >= 1000) return 0
+
+  return 100
+}
+
 export const calculateTotal = ({
-  subtotal,
-  deliveryFee,
-  codFee,
-  promoDiscount,
+  subtotal = 0,
+  deliveryFee = 0,
+  codFee = 0,
+  
 }) => {
-  const total = subtotal + deliveryFee + codFee - promoDiscount;
-  return Math.max(0, Math.round(total * 100) / 100);
+  return (
+    Number(subtotal || 0) +
+    Number(deliveryFee || 0) +
+    Number(codFee || 0) 
+  );
 };
-
 /**
- * Format currency for display
+ * Format currency
  */
 export const formatCurrency = (amount) => {
   return new Intl.NumberFormat("en-NP", {
@@ -62,22 +59,54 @@ export const formatCurrency = (amount) => {
 };
 
 /**
- * Validate delivery date/time
+ * Return available same-day slots only
  */
-export const validateDeliveryDateTime = (deliveryDateTime) => {
-  if (!deliveryDateTime) {
-    return { valid: false, error: "Delivery date/time required" };
-  }
-
-  const selectedTime = new Date(deliveryDateTime);
+export const getAvailableTimeSlots = () => {
   const now = new Date();
-  const minTime = new Date(now.getTime() + 30 * 60000); // 30 mins from now
+  const currentHour = now.getHours();
 
-  if (selectedTime < minTime) {
-    return { valid: false, error: "Schedule at least 30 minutes from now" };
+  return DELIVERY_CONFIG.SCHEDULED.timeSlots.filter(
+    (slot) => slot.startHour > currentHour
+  );
+};
+
+/**
+ * Validate slot selection
+ */
+export const validateDeliverySlot = (slotId) => {
+  if (!slotId) {
+    return {
+      valid: false,
+      error: "Please select a delivery slot",
+    };
   }
 
-  return { valid: true, error: null };
+  const availableSlots = getAvailableTimeSlots();
+
+  const selectedSlot = availableSlots.find(
+    (slot) => slot.id === slotId
+  );
+
+  if (!selectedSlot) {
+    return {
+      valid: false,
+      error: "Selected slot is no longer available",
+    };
+  }
+
+  return {
+    valid: true,
+    error: null,
+  };
+};
+
+/**
+ * Get slot details by ID
+ */
+export const getSlotById = (slotId) => {
+  return DELIVERY_CONFIG.SCHEDULED.timeSlots.find(
+    (slot) => slot.id === slotId
+  );
 };
 
 export default {
@@ -85,6 +114,8 @@ export default {
   calculateDeliveryFee,
   calculateTotal,
   formatCurrency,
-  validateDeliveryDateTime,
+  getAvailableTimeSlots,
+  validateDeliverySlot,
+  getSlotById,
   DELIVERY_CONFIG,
 };

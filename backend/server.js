@@ -2,10 +2,13 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import compression from "compression";
 import cookieParser from "cookie-parser";
+import morgan from "morgan";
 
+import CONFIG from "./config/constants.js";
+import { getCorsOptions } from "./config/cors.js";
+import { globalLimiter, authLimiter, checkoutLimiter } from "./config/limiters.js";
 import { attachJwtSession } from "./middleware/auth.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { connectDB } from "./config/db.js";
@@ -17,93 +20,157 @@ import adminRoutes from "./routes/adminRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
+import storageRoutes from "./routes/storageRoutes.js";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { multerErrorHandler } from "./middleware/multerErrorHandler.js";
+import { uploadsDir } from "./utils/uploadConfig.js";
 
 const app = express();
 
-const {
-  PORT = "5000",
-  FRONTEND_URL = "http://localhost:5173",
-  NODE_ENV = "development",
-  MONGODB_URI,
-  JWT_SECRET,
-} = process.env;
+// ============================================
+// MIDDLEWARE SETUP (Order matters!)
+// ============================================
 
-if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI is required in environment variables");
+// Trust proxy (for deployment)
+if (CONFIG.TRUST_PROXY) {
+  app.set("trust proxy", CONFIG.TRUST_PROXY);
 }
 
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is required in environment variables");
+// Security headers (production only)
+if (CONFIG.ENABLE_HELMET) {
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Adjust if needed for your frontend
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+    })
+  );
 }
 
-const allowedOrigins = [
-  FRONTEND_URL,
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-].filter(Boolean);
+// CORS
+app.use(cors(getCorsOptions()));
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (NODE_ENV !== "production" && /^(https?:\/\/localhost|https?:\/\/127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error("CORS origin not allowed"), false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-    maxAge: 86400,
-  })
-);
+// Compression
+if (CONFIG.ENABLE_COMPRESSION) {
+  app.use(compression());
+}
 
-app.use(helmet());
-app.use(compression());
-app.use(express.json({ limit: "1mb" }));
+// Body parsing
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
+app.use("/uploads", express.static(uploadsDir));
+
+// Logging
+app.use(morgan(CONFIG.LOG_FORMAT));
 app.use(requestLogger);
+
+// Rate limiting (global first, specific routes can override)
+app.use(globalLimiter);
+
+// JWT Session attachment (non-blocking)
 app.use(attachJwtSession);
 
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: NODE_ENV === "production" ? 300 : 1000,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
 
-app.set("trust proxy", 1);
-app.get("/healthz", (req, res) => res.json({ ok: true }));
-app.use("/api/auth", authRoutes);
+// ============================================
+// HEALTH & DEBUG ENDPOINTS
+// ============================================
+
+app.get("/healthz", (req, res) => {
+  res.json({ success: true, message: "OK", env: CONFIG.NODE_ENV });
+});
+
+app.get("/debug/routes", (req, res) => {
+  if (CONFIG.isProduction) {
+    return res.status(403).json({ success: false, message: "Not available in production" });
+  }
+  res.json({
+    auth: "/api/auth",
+    products: "/api/products",
+    categories: "/api/categories",
+    orders: "/api/orders",
+    cart: "/api/cart",
+    checkout: "/api/checkout",
+    users: "/api/users",
+    storage: "/api/storage",
+    admin: "/api/admin",
+  });
+});
+
+// ============================================
+// API ROUTES
+// ============================================
+
+// Auth routes (with stricter rate limiting)
+app.use("/api/auth", authLimiter, authRoutes);
+
+// Product routes
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/cart", cartRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/checkout", checkoutRoutes);
-app.use((req, res) => {
-  res.status(404).json({ message: "Not found" });
-});
-app.use((err, req, res, next) => {
-  const status = err.statusCode || 500;
-  const message = err.message || "Internal server error";
-  res.status(status).json({ message });
-});
 
-connectDB(MONGODB_URI)
+// Cart routes
+app.use("/api/cart", cartRoutes);
+
+// Order & checkout routes (checkout has additional rate limiting)
+app.use("/api/orders", orderRoutes);
+app.use("/api/checkout", checkoutLimiter, checkoutRoutes);
+
+// User routes
+app.use("/api/users", userRoutes);
+
+// Storage routes
+app.use("/api/storage", storageRoutes);
+
+// Admin routes
+app.use("/api/admin", adminRoutes);
+
+// ============================================
+// ERROR HANDLING
+// ============================================
+
+// 404 handler (must be after all route handlers)
+app.use(notFoundHandler);
+
+// Multer upload errors
+app.use(multerErrorHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
+
+// ============================================
+// SERVER STARTUP
+// ============================================
+
+connectDB(CONFIG.MONGO_URI)
   .then(() => {
-    const port = Number(PORT);
-    app.listen(port, () => {
-      console.log(`Server running on port ${port}`);
-      console.log("MongoDB configured.");
+    app.listen(CONFIG.PORT, CONFIG.HOST, () => {
+      console.log(`
+
+        HaatOnline Backend Server                
+╠════════════════════════════════════════════╣
+  Environment: ${CONFIG.NODE_ENV.toUpperCase().padEnd(34)}
+  Port:        ${String(CONFIG.PORT).padEnd(34)}
+  URL:         http://${CONFIG.HOST}:${CONFIG.PORT}${" ".repeat(22)}
+  MongoDB:     Connected ✓${" ".repeat(25)}
+
+      `);
     });
   })
   .catch((err) => {
-    console.error("Failed to connect to MongoDB:", err);
+    console.error(
+      "\n❌ FATAL: Failed to connect to MongoDB\n",
+      err?.message || err
+    );
     process.exit(1);
   });
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received. Shutting down gracefully...");
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  console.log("\nSIGINT received. Shutting down gracefully...");
+  process.exit(0);
+});
+

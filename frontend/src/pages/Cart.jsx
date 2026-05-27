@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/useAuth"
-import { axiosClient } from "../utils/axiosClient"
+import { cartService } from "../services/cart-service"
 
 export default function Cart() {
+  const navigate = useNavigate()
   const { user, loading: authLoading } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -18,8 +19,8 @@ export default function Cart() {
         return
       }
 
-      const response = await axiosClient.get(`/api/cart?userId=${user.id}`)
-      setCartItems(response.data)
+      const response = await cartService.getCart(user.id)
+      setCartItems(response.data?.items || [])
     } catch (err) {
       console.error("Error fetching cart:", err)
       setError("Failed to load cart. Please try again later.")
@@ -47,10 +48,8 @@ export default function Cart() {
       const userId = user.id
       const itemId = item.cartItemId || item.id
 
-      const response = await axiosClient.delete(
-        `/api/cart/${itemId}?userId=${userId}`
-      )
-      setCartItems(response.data)
+      const response = await cartService.removeItem(itemId, userId)
+      setCartItems(response.data?.items || [])
     } catch (err) {
       console.error("Failed to remove item:", err)
       alert("Unable to remove item. Please try again.")
@@ -69,15 +68,12 @@ export default function Cart() {
       const userId = user.id
       const itemId = item.cartItemId || item.id
 
-      const response = await axiosClient.put(
-        `/api/cart/${itemId}`,
-        {
-          userId,
-          quantity: finalQuantity,
-        }
-      )
+      const response = await cartService.updateItemQuantity(itemId, {
+        userId,
+        quantity: finalQuantity,
+      })
 
-      setCartItems(response.data)
+      setCartItems(response.data?.items || [])
     } catch (err) {
       console.error("Failed to update quantity:", err)
       alert("Unable to update quantity. Please try again.")
@@ -204,7 +200,10 @@ export default function Cart() {
               </div>
             </div>
 
-            <button className="w-full bg-green-800 text-white font-semibold text-lg px-6 py-3 rounded-lg shadow-lg hover:bg-green-600 transition duration-300 ease-in-out">
+            <button
+              onClick={() => navigate("/checkout")}
+              className="w-full bg-green-800 text-white font-semibold text-lg px-6 py-3 rounded-lg shadow-lg hover:bg-green-600 transition duration-300 ease-in-out"
+            >
               Proceed to Checkout
             </button>
           </div>

@@ -9,7 +9,8 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { useAuth } from "../context/useAuth"
-import axiosClient from "../utils/axiosClient";
+import { authService } from "../services/auth-service";
+import { setAuthToken } from "../services/api";
 
 import groceryImg from "../assets/grocery1.png"
 import logoImg from "../assets/logo.png"
@@ -18,9 +19,11 @@ export default function Register() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [phone, setPhone] = useState("")
+  const [phoneno, setPhone] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false)
+  const [policyError, setPolicyError] = useState("")
 
   const navigate = useNavigate()
   const { setUser } = useAuth()
@@ -36,19 +39,23 @@ export default function Register() {
   
   const handleSubmit = async (e) => {
     e.preventDefault()
-
     setError("")
+    setPolicyError("")
+    if (!acceptedPolicies) {
+      setPolicyError("You must accept the Terms & Conditions and Privacy Policy.");
+      return;
+    }
     setLoading(true)
-
     try {
       if (!name) return setError("Name is required")
-      if (!phone) return setError("Phone is required")
+      if (!phoneno) return setError("Phone number is required")
 
-      const response = await axiosClient.post("/auth/register", {
+      const response = await authService.register({
         name,
         email,
         password,
-        phone,
+        phoneno,
+        acceptedPolicies,
       })
 
       const user = response?.data?.user
@@ -57,20 +64,20 @@ export default function Register() {
         throw new Error("Registration failed")
       }
 
-      window.localStorage.setItem("haatonline_auth_token", token)
+      setAuthToken(token)
       setUser(user)
       await gotoByRole(user)
     } catch (err) {
-      setError(err?.message || "Registration failed. Please try again.")
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Registration failed. Please try again."
+      )
     } finally {
       setLoading(false)
     }
   }
 
-  // Google Register/Login is not available in the local auth flow yet.
-  const handleGoogleSignup = () => {
-    setError("Google signup is not available in the local auth flow yet.")
-  }
 
   return (
     <div className="min-h-screen flex bg-[#f8faf7] overflow-hidden">
@@ -205,7 +212,7 @@ export default function Register() {
                   <input
                     type="tel"
                     placeholder="98XXXXXXXX"
-                    value={phone}
+                    value={phoneno}
                     onChange={(e) => setPhone(e.target.value)}
                     required
                     pattern="^(97|98)[0-9]{8}$"
@@ -216,6 +223,7 @@ export default function Register() {
                   />
                 </div>
               </div>
+
 
               <div>
                 <label className="text-sm font-semibold text-gray-700 mb-2 block">
@@ -235,9 +243,46 @@ export default function Register() {
                 </div>
               </div>
 
+              {/* Accept Terms & Privacy Checkbox */}
+              <div className="flex items-start gap-3 mt-2">
+                <input
+                  id="accept-policies"
+                  type="checkbox"
+                  checked={acceptedPolicies}
+                  onChange={e => setAcceptedPolicies(e.target.checked)}
+                  className="mt-1 accent-green-600 w-5 h-5 rounded focus:ring-green-500 border-gray-300"
+                  required
+                />
+                <label htmlFor="accept-policies" className="text-sm text-gray-700 select-none flex-1 flex flex-wrap">
+                  I agree to the
+                  <Link
+                    to="/terms-and-conditions"
+                    className="underline text-green-700 hover:text-green-800 mx-1 transition-colors duration-200"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    tabIndex={0}
+                  >
+                    Terms & Conditions
+                  </Link>
+                  and
+                  <Link
+                    to="/privacy-policy"
+                    className="underline text-green-700 hover:text-green-800 mx-1 transition-colors duration-200"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    tabIndex={0}
+                  >
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+              {policyError && (
+                <div className="text-red-600 text-xs mt-1">{policyError}</div>
+              )}
+
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !acceptedPolicies}
                 className="group w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl font-semibold shadow-lg transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
@@ -258,19 +303,7 @@ export default function Register() {
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleSignup}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 border border-gray-200 hover:border-green-400 py-4 rounded-2xl font-medium text-gray-700 transition-all duration-300 bg-white hover:bg-green-50"
-            >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                alt="Google"
-                className="w-5 h-5"
-              />
-              Continue with Google
-            </button>
+            
 
             <p className="mt-8 text-center text-gray-500">
               Already have an account?{" "}

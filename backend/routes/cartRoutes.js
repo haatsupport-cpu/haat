@@ -9,14 +9,15 @@ import {
   removeCartItem,
   removeCartItemByProduct,
 } from "../controllers/cartController.js";
+import { validateAddToCart, validateCartQuantity } from "../validators/cartValidators.js";
 
 const router = express.Router();
 
 router.get("/", requireAuth, asyncHandler(getCart));
-router.post("/", requireAuth, asyncHandler(addToCart));
-router.put("/:id", requireAuth, asyncHandler(updateCartItemQuantityById));
-router.put("/update", requireAuth, asyncHandler(updateCartItemQuantityByProduct));
-router.delete("/:id", requireAuth, asyncHandler(removeCartItem));
+router.post("/", requireAuth, validateAddToCart, asyncHandler(addToCart));
+router.put("/update", requireAuth, validateAddToCart, validateCartQuantity, asyncHandler(updateCartItemQuantityByProduct));
+router.put("/:id", requireAuth, validateCartQuantity, asyncHandler(updateCartItemQuantityById));
 router.delete("/remove/:userId/:productId", requireAuth, asyncHandler(removeCartItemByProduct));
+router.delete("/:id", requireAuth, asyncHandler(removeCartItem));
 
 export default router;

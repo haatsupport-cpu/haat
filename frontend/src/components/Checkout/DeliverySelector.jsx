@@ -1,7 +1,7 @@
 // frontend/src/components/Checkout/DeliverySelector.jsx
 // Component for selecting delivery type (Instant vs Scheduled)
 
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { Clock, Calendar, AlertCircle } from "lucide-react";
 import { isNightTime } from "../../utils/checkoutCalculator";
 
@@ -19,7 +19,7 @@ export default function DeliverySelector({
       : "";
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4 rounded-3xl border border-green-200/30 bg-gradient-to-br from-green-50 to-emerald-50 p-6"
@@ -28,7 +28,7 @@ export default function DeliverySelector({
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* Instant Delivery */}
-        <motion.label
+        <Motion.label
           whileHover={{ scale: 1.02 }}
           className={`cursor-pointer rounded-2xl border-2 p-4 transition ${
             deliveryType === "instant"
@@ -55,10 +55,10 @@ export default function DeliverySelector({
               </p>
             </div>
           </div>
-        </motion.label>
+        </Motion.label>
 
         {/* Scheduled Delivery */}
-        <motion.label
+        <Motion.label
           whileHover={{ scale: 1.02 }}
           className={`cursor-pointer rounded-2xl border-2 p-4 transition ${
             deliveryType === "scheduled"
@@ -82,12 +82,12 @@ export default function DeliverySelector({
               <p className="mt-2 text-lg font-bold text-blue-600">Rs. {deliveryFee}</p>
             </div>
           </div>
-        </motion.label>
+        </Motion.label>
       </div>
 
       {/* Scheduled Delivery Picker */}
       {deliveryType === "scheduled" && (
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           className="space-y-3 pt-4 border-t border-slate-200"
@@ -111,7 +111,7 @@ export default function DeliverySelector({
               Please select a delivery date and time
             </div>
           )}
-        </motion.div>
+        </Motion.div>
       )}
 
       {/* Night Charge Info */}
@@ -121,6 +121,6 @@ export default function DeliverySelector({
           Night surcharge applied (10 PM - 3 AM)
         </div>
       )}
-    </motion.div>
+    </Motion.div>
   );
 }

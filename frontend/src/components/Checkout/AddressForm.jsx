@@ -1,9 +1,8 @@
 // frontend/src/components/Checkout/AddressForm.jsx
 // Component for collecting delivery address
 
-import { motion } from "framer-motion";
-import { MapPin, Phone, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { motion as Motion } from "framer-motion";
+import { AlertCircle } from "lucide-react";
 
 export default function AddressForm({
   formData,
@@ -19,12 +18,12 @@ export default function AddressForm({
     setError(null);
   };
 
-  const validatePhone = (phone) => {
-    return /^\d{10}$/.test(phone.replace(/\D/g, ""));
+  const validatePhone = (phoneno) => {
+    return /^\d{10}$/.test(phoneno.replace(/\D/g, ""));
   };
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
@@ -46,10 +45,10 @@ export default function AddressForm({
           />
         </div>
 
-        {/* Phone */}
+        {/* phoneno */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Phone Number *
+            phoneno Number *
           </label>
           <input
             type="tel"
@@ -61,7 +60,7 @@ export default function AddressForm({
           {formData.customerPhone &&
             !validatePhone(formData.customerPhone) && (
               <p className="mt-1 text-xs text-red-500">
-                Phone must be 10 digits
+                phoneno must be 10 digits
               </p>
             )}
         </div>
@@ -102,6 +101,6 @@ export default function AddressForm({
           {error}
         </div>
       )}
-    </motion.div>
+    </Motion.div>
   );
 }

@@ -58,10 +58,26 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Order items are required" });
     }
 
-    const subtotal = parseNumeric(totalAmount?.subtotal ?? totalAmount?.sub_total ?? 0);
-    const tax = parseNumeric(totalAmount?.tax ?? 0);
-    const shipping = parseNumeric(totalAmount?.shipping ?? 0);
-    const total = parseNumeric(totalAmount?.total_amount ?? subtotal + tax + shipping);
+    const subtotalCandidate =
+      totalAmount && typeof totalAmount === "object"
+        ? totalAmount?.subtotal ?? totalAmount?.sub_total ?? req.body.subtotal
+        : req.body.subtotal ?? totalAmount;
+    const subtotal = parseNumeric(subtotalCandidate ?? 0);
+    const tax = parseNumeric(
+      totalAmount && typeof totalAmount === "object"
+        ? totalAmount?.tax ?? req.body.tax
+        : req.body.tax
+    );
+    const shipping = parseNumeric(
+      totalAmount && typeof totalAmount === "object"
+        ? totalAmount?.shipping ?? req.body.shipping
+        : req.body.shipping
+    );
+    const totalCandidate =
+      totalAmount && typeof totalAmount === "object"
+        ? totalAmount?.total_amount ?? totalAmount?.totalAmount
+        : req.body.totalAmount ?? totalAmount;
+    const total = parseNumeric(totalCandidate ?? subtotal + tax + shipping);
 
     session.startTransaction();
     const lineItems = await buildLineItems(items, session);
@@ -106,7 +122,11 @@ export const createOrder = async (req, res) => {
 
     await session.commitTransaction();
     const createdOrder = order[0];
-    return res.status(201).json({ message: "Order placed successfully", orderId: createdOrder._id.toString() });
+    return res.status(201).json({
+      message: "Order placed successfully",
+      orderId: createdOrder._id.toString(),
+      orderNumber: createdOrder.orderNumber,
+    });
   } catch (err) {
     await session.abortTransaction();
     return res.status(err.statusCode || 500).json({ message: "Failed to place order", details: err.message });
@@ -117,18 +137,55 @@ export const createOrder = async (req, res) => {
 
 export const getOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.user.id })
+    const query = req.user.role === "admin" ? {} : { userId: req.user.id }
+    const orders = await Order.find(query)
       .sort({ createdAt: -1 })
       .lean();
 
     return res.json(
       orders.map((order) => ({
+        // IDs (support both conventions)
         id: order._id.toString(),
+        _id: order._id.toString(),
+        userId: order.userId.toString(),
         user_id: order.userId.toString(),
+        
+        // Core order info
+        orderNumber: order.orderNumber || `ORD-${order._id.toString().slice(-8)}`,
         status: order.status,
+        paymentStatus: order.paymentStatus || "pending",
+        payment: order.paymentStatus || "pending",
+        
+        // Customer info
+        customerName: order.customerName || "Guest",
+        customer_name: order.customerName || "Guest",
+        customerPhone: order.customerPhone,
+        customer_phone: order.customerPhone,
+        
+        // Amounts (support both conventions)
+        totalAmount: order.totalAmount,
         total_amount: order.totalAmount,
-        placed_at: order.createdAt,
+        subtotal: order.subtotal,
+        tax: order.tax,
+        shipping: order.shipping,
+        
+        // Delivery info
+        deliveryAddress: order.deliveryAddress,
+        delivery_address: order.deliveryAddress,
+        landmark: order.landmark,
+        deliveryType: order.deliveryType,
+        delivery_type: order.deliveryType,
+        
+        // Timing
+        createdAt: order.createdAt,
         created_at: order.createdAt,
+        updatedAt: order.updatedAt,
+        updated_at: order.updatedAt,
+        placedAt: order.createdAt,
+        placed_at: order.createdAt,
+        
+        // Items
+        items: order.items || [],
       }))
     );
   } catch (err) {
@@ -139,18 +196,35 @@ export const getOrders = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, paymentStatus } = req.body;
 
-    if (!status) {
-      return res.status(400).json({ message: "Order status is required" });
+    // Determine which field to update
+    const updateData = {};
+    
+    if (status) {
+      updateData.status = status;
+    }
+    
+    if (paymentStatus) {
+      updateData.paymentStatus = paymentStatus;
     }
 
-    const order = await Order.findByIdAndUpdate(id, { status }, { new: true });
+    if (!status && !paymentStatus) {
+      return res.status(400).json({ message: "Either order status or payment status is required" });
+    }
+
+    const order = await Order.findByIdAndUpdate(id, updateData, { new: true });
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    return res.json({ message: "Order status updated successfully" });
+    const message = status && paymentStatus 
+      ? "Order and payment status updated successfully"
+      : status 
+      ? "Order status updated successfully"
+      : "Payment status updated successfully";
+
+    return res.json({ message });
   } catch (err) {
     return res.status(500).json({ message: "Failed to update order status", details: err.message });
   }

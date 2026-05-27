@@ -7,6 +7,7 @@ import DeliveryAddress from "../models/DeliveryAddress.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Cart from "../models/Cart.js";
+import CONFIG from "../config/constants.js";
 
 export const getPricingConfig = async (req, res) => {
   try {
@@ -106,14 +107,14 @@ export const calculateOrderTotal = async (req, res) => {
 export const saveDeliveryAddress = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { fullName, phone, address, landmark, deliveryType, scheduledDeliveryAt, isDefault } = req.body;
+    const { fullName, phoneno, address, landmark, deliveryType, scheduledDeliveryAt, isDefault } = req.body;
 
-    if (!fullName || !phone || !address || !landmark) {
-      return res.status(400).json({ message: "fullName, phone, address, and landmark are required" });
+    if (!fullName || !phoneno || !address || !landmark) {
+      return res.status(400).json({ message: "fullName, phoneno, address, and landmark are required" });
     }
 
-    if (!/^\d{10}$/.test(phone.replace(/\D/g, ""))) {
-      return res.status(400).json({ message: "Invalid phone number format" });
+    if (!/^\d{10}$/.test(phoneno.replace(/\D/g, ""))) {
+      return res.status(400).json({ message: "Invalid phoneno number format" });
     }
 
     if (deliveryType === "scheduled" && scheduledDeliveryAt) {
@@ -130,7 +131,7 @@ export const saveDeliveryAddress = async (req, res) => {
     const addressDoc = await DeliveryAddress.create({
       user: userId,
       fullName: fullName.trim(),
-      phone: phone.trim(),
+      phoneno: phoneno.trim(),
       address: address.trim(),
       landmark: landmark.trim(),
       deliveryType: deliveryType || "instant",
@@ -141,7 +142,7 @@ export const saveDeliveryAddress = async (req, res) => {
     return res.status(201).json({
       id: addressDoc._id.toString(),
       fullName: addressDoc.fullName,
-      phone: addressDoc.phone,
+      phoneno: addressDoc.phoneno,
       address: addressDoc.address,
       landmark: addressDoc.landmark,
       deliveryType: addressDoc.deliveryType,
@@ -161,7 +162,7 @@ export const getUserDeliveryAddresses = async (req, res) => {
     return res.json(addresses.map((address) => ({
       id: address._id.toString(),
       fullName: address.fullName,
-      phone: address.phone,
+      phoneno: address.phoneno,
       address: address.address,
       landmark: address.landmark,
       deliveryType: address.deliveryType,
@@ -222,8 +223,12 @@ export const createCheckoutOrder = async (req, res) => {
       items,
       customerName,
       customerPhone,
-      deliveryAddress,
+      // location fields
+      lat,
+      lng,
+      address,
       landmark,
+      label,
       deliveryType,
       scheduledDeliveryAt,
       paymentMode,
@@ -241,8 +246,10 @@ export const createCheckoutOrder = async (req, res) => {
       items.length === 0 ||
       !customerName ||
       !customerPhone ||
-      !deliveryAddress ||
-      !landmark ||
+      address === undefined ||
+      landmark === undefined ||
+      lat === undefined ||
+      lng === undefined ||
       !deliveryType ||
       !paymentMode ||
       totalAmount === undefined
@@ -251,7 +258,7 @@ export const createCheckoutOrder = async (req, res) => {
     }
 
     if (!/^\d{10}$/.test(customerPhone.replace(/\D/g, ""))) {
-      return res.status(400).json({ message: "Invalid phone number format" });
+      return res.status(400).json({ message: "Invalid phoneno number format" });
     }
 
     if (deliveryType === "scheduled" && scheduledDeliveryAt) {
@@ -260,6 +267,53 @@ export const createCheckoutOrder = async (req, res) => {
         return res.status(400).json({ message: validation.error });
       }
     }
+
+    // Validate coordinates
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
+    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng) || parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
+      return res.status(400).json({ message: "Invalid coordinates" });
+    }
+
+    // Round coords to 6 decimals
+    const rLat = Number(parsedLat.toFixed(6));
+    const rLng = Number(parsedLng.toFixed(6));
+
+    // Clean/trim text fields
+    const clean = (v) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "");
+    const cleanAddress = clean(address);
+    const cleanLandmark = clean(landmark);
+    const cleanLabel = clean(label || "");
+
+    if (!cleanAddress) return res.status(400).json({ message: "Empty address" });
+
+    // Haversine distance (km)
+    const haversineKm = (lat1, lon1, lat2, lon2) => {
+      const toRad = (d) => (d * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    };
+
+    // Shop origin - replace placeholders with real coords via env or code
+    const SHOP_LAT = CONFIG.SHOP_LAT;
+    const SHOP_LNG = CONFIG.SHOP_LNG;
+
+    const distanceKm = haversineKm(SHOP_LAT, SHOP_LNG, rLat, rLng);
+
+    // Surcharge logic
+    const baseRadius = 15; // km
+    const excessKm = distanceKm > baseRadius ? Math.max(0, distanceKm - baseRadius) : 0;
+    const surcharge = excessKm > 0 ? Number((excessKm * 25).toFixed(2)) : 0; // Rs per km
+
+    // Merge surcharge into deliveryFee and total if schema lacks deliveryCharge field
+    const mergedDeliveryFee = Number((Number(deliveryFee ?? 0) + surcharge).toFixed(2));
+    const mergedTotal = Number((Number(totalAmount ?? 0) + surcharge).toFixed(2));
+
+    // Format storage string for deliveryAddress per requirement
+    const storedLocation = `Lat:${rLat},Lng:${rLng}|Label:${cleanLabel || "Home"}|Address:${cleanAddress}|Landmark:${cleanLandmark}`;
 
     let finalPromoCodeId = null;
     let validatedPromo = null;
@@ -292,17 +346,17 @@ export const createCheckoutOrder = async (req, res) => {
           userId,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
-          deliveryAddress: deliveryAddress.trim(),
-          landmark: landmark.trim(),
+          deliveryAddress: storedLocation,
+          landmark: cleanLandmark,
           deliveryType,
           scheduledDeliveryAt: scheduledDeliveryAt ? new Date(scheduledDeliveryAt) : null,
           paymentMode,
           promoCodeId: finalPromoCodeId,
           promoDiscount: Number(promoDiscount ?? 0),
-          deliveryFee: Number(deliveryFee ?? 0),
+          deliveryFee: mergedDeliveryFee,
           codFee: Number(codFee ?? 0),
           subtotal: Number(subtotal ?? orderItems.reduce((sum, item) => sum + item.total, 0)),
-          totalAmount: Number(totalAmount),
+          totalAmount: mergedTotal,
           orderNumber: generateOrderNumber(),
           items: orderItems,
         },

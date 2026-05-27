@@ -3,7 +3,7 @@ import User from "../models/User.js";
 const transformProfile = (user) => ({
   id: user._id.toString(),
   full_name: user.name,
-  phone: user.phone,
+  phoneno: user.phoneno,
   photo_url: user.photo,
   role: user.role,
   created_at: user.createdAt,
@@ -18,7 +18,7 @@ export const getCurrentUser = async (req, res) => {
 
     return res.json({
       id: user._id.toString(),
-      email: user.email,
+      phoneno: user.phoneno,
       authProvider: user.authProvider,
       profile: transformProfile(user),
     });
@@ -30,11 +30,11 @@ export const getCurrentUser = async (req, res) => {
 export const updateCurrentUser = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { full_name, phone, photo_url } = req.body;
+    const { full_name, phoneno, photo_url } = req.body;
     const payload = {};
 
     if (full_name !== undefined) payload.name = full_name;
-    if (phone !== undefined) payload.phone = phone;
+    if (phoneno !== undefined) payload.phoneno = phoneno;
     if (photo_url !== undefined) payload.photo = photo_url;
 
     if (!Object.keys(payload).length) {

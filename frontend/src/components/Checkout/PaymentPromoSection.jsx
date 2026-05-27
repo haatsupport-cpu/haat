@@ -1,7 +1,7 @@
 // frontend/src/components/Checkout/PaymentPromoSection.jsx
 // Component for payment method and promo code
 
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { CreditCard, Tag, AlertCircle, CheckCircle } from "lucide-react";
 import { useState } from "react";
 
@@ -9,7 +9,6 @@ export default function PaymentPromoSection({
   paymentMode,
   setPaymentMode,
   promoCode,
-  setPromoCode,
   promoValid,
   promoError,
   promoDiscount,
@@ -25,7 +24,7 @@ export default function PaymentPromoSection({
   };
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
@@ -38,7 +37,7 @@ export default function PaymentPromoSection({
 
         <div className="grid gap-4 md:grid-cols-2">
           {/* Online Payment */}
-          <motion.label
+          <Motion.label
             whileHover={{ scale: 1.02 }}
             className={`cursor-pointer rounded-2xl border-2 p-4 transition ${
               paymentMode === "online"
@@ -61,10 +60,10 @@ export default function PaymentPromoSection({
                 <p className="text-sm text-slate-600">eSewa, Khalti, etc.</p>
               </div>
             </div>
-          </motion.label>
+          </Motion.label>
 
           {/* Cash on Delivery */}
-          <motion.label
+          <Motion.label
             whileHover={{ scale: 1.02 }}
             className={`cursor-pointer rounded-2xl border-2 p-4 transition ${
               paymentMode === "cod"
@@ -89,7 +88,7 @@ export default function PaymentPromoSection({
                 <p className="text-sm text-slate-600">+Rs. 10 fee</p>
               </div>
             </div>
-          </motion.label>
+          </Motion.label>
         </div>
       </div>
 
@@ -120,27 +119,27 @@ export default function PaymentPromoSection({
 
         {/* Promo Status */}
         {promoValid && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-3 flex items-center gap-2 rounded-xl bg-green-50 p-3 text-sm text-green-700"
           >
             <CheckCircle className="h-4 w-4" />
             Promo code applied! Discount: Rs. {promoDiscount.toFixed(2)}
-          </motion.div>
+          </Motion.div>
         )}
 
         {promoError && (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-3 flex items-center gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-600"
           >
             <AlertCircle className="h-4 w-4" />
             {promoError}
-          </motion.div>
+          </Motion.div>
         )}
       </div>
-    </motion.div>
+    </Motion.div>
   );
 }

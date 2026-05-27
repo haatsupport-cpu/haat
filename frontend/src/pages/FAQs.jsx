@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search, ShoppingBag, CreditCard, Truck, AlertCircle, HelpCircle } from 'lucide-react';
 
 const FAQItem = ({ question, answer, icon: Icon }) => {
@@ -13,20 +13,20 @@ const FAQItem = ({ question, answer, icon: Icon }) => {
       >
         <div className="flex items-center gap-4">
           <div className="p-2 bg-green-50 rounded-lg">
-            <Icon className="w-5 h-5 text-green-600" />
+            {React.createElement(Icon, { className: "w-5 h-5 text-green-600" })}
           </div>
           <span className="font-bold text-gray-800 md:text-lg">{question}</span>
         </div>
-        <motion.div
+        <Motion.div
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.3 }}
         >
           <ChevronDown className="w-5 h-5 text-gray-400" />
-        </motion.div>
+        </Motion.div>
       </button>
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <Motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -35,7 +35,7 @@ const FAQItem = ({ question, answer, icon: Icon }) => {
             <div className="p-5 pt-0 text-gray-600 leading-relaxed border-t border-gray-50">
               {answer}
             </div>
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>
@@ -77,7 +77,7 @@ export default function FAQs() {
     {
       icon: HelpCircle,
       question: "How can I contact customer support?",
-      answer: "You can reach us via WhatsApp at +977 986-9301915, email us at haatonline@gmail.com, or message us on our Facebook page 'Online Haat'."
+      answer: "You can reach us via WhatsApp at +977 986-9301915, email us at haatsupport@gmail.com, or message us on our Facebook page 'Online Haat'."
     }
   ];
 
@@ -85,21 +85,21 @@ export default function FAQs() {
     <div className="min-h-screen bg-[#fcfdfb] pt-20 pb-20 px-6">
       {/* Hero */}
       <div className="max-w-3xl mx-auto text-center mb-16">
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-green-600 font-bold mb-3 tracking-widest uppercase text-sm"
         >
           Help Center
-        </motion.div>
-        <motion.h1 
+        </Motion.div>
+        <Motion.h1 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="text-4xl md:text-5xl font-black text-gray-900 mb-6"
         >
           Questions? We've got <span className="text-green-600 text-shadow-sm">Answers.</span>
-        </motion.h1>
+        </Motion.h1>
         
         {/* Modern Search Bar Visual */}
         <div className="relative max-w-xl mx-auto mt-8">
@@ -113,7 +113,7 @@ export default function FAQs() {
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
@@ -121,10 +121,10 @@ export default function FAQs() {
           {faqData.map((faq, index) => (
             <FAQItem key={index} {...faq} />
           ))}
-        </motion.div>
+        </Motion.div>
 
         {/* Still have questions? */}
-        <motion.div 
+        <Motion.div 
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           className="mt-16 p-8 bg-green-600 rounded-3xl text-white text-center"
@@ -134,7 +134,7 @@ export default function FAQs() {
           <a href="/contact-us" className="inline-block bg-white text-green-700 px-8 py-3 rounded-xl font-bold hover:bg-green-50 transition-colors shadow-lg">
             Get in Touch
           </a>
-        </motion.div>
+        </Motion.div>
       </div>
     </div>
   );

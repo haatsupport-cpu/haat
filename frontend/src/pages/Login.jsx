@@ -3,38 +3,26 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 
-import axiosClient from "../utils/axiosClient";
+import { authService } from "../services/auth-service";
+import { setAuthToken } from "../services/api";
 import { useAuth } from "../context/useAuth";
 
 import groceryImg from "../assets/grocery1.png";
-import logoImg from "../assets/logo1.png";
+import logoImg from "../assets/logobg.png";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const [phoneno, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
-  // Role-based navigation handled via profiles fetch in this page
-
-  const { setUser } = useAuth();
+  const { user, loading: authLoading, setUser } = useAuth();
   useEffect(() => {
-    const run = async () => {
-      try {
-        const response = await axiosClient.get("/auth/me");
-        if (response?.data?.user) {
-          const role = response.data.user.role;
-          setUser(response.data.user);
-          if (role === "admin") navigate("/admin");
-          else navigate("/products");
-        }
-      } catch {
-        // ignore
-      }
-    };
-    run();
-  }, [navigate, setUser]);
+    if (authLoading || !user) return;
+    if (user.role === "admin") navigate("/admin");
+    else navigate("/products");
+  }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,14 +31,14 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await axiosClient.post("/auth/login", { email, password });
+      const response = await authService.login({ phoneno, password });
       const user = response.data?.user;
       const token = response.data?.token;
       if (!user || !token) {
         throw new Error("Login failed");
       }
 
-      window.localStorage.setItem("haatonline_auth_token", token);
+      setAuthToken(token);
       setUser(user);
       if (user.role === "admin") navigate("/admin");
       else navigate("/products");
@@ -61,9 +49,7 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError("Google login is not available in the local auth flow yet.");
-  };
+  
 
   return (
     <div className="min-h-screen flex bg-[#f8faf7] overflow-hidden">
@@ -155,15 +141,15 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                  Email Address
+                  Phone Number
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="phoneno"
+                    placeholder="98XXXXXXXX"
+                    value={phoneno}
+                    onChange={(e) => setPhone(e.target.value)}
                     required
                     className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white/70 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
                   />
@@ -219,19 +205,7 @@ export default function Login() {
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 border border-gray-200 hover:border-green-400 py-4 rounded-2xl font-medium text-gray-700 transition-all duration-300 bg-white hover:bg-green-50"
-            >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                alt="Google"
-                className="w-5 h-5"
-              />
-              Continue with Google
-            </button>
+           
 
             <p className="mt-8 text-center text-gray-500">
               Don’t have an account?{" "}
@@ -247,4 +221,5 @@ export default function Login() {
       </div>
     </div>
   );
+  
 }

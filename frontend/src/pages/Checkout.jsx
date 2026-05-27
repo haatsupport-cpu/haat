@@ -1,20 +1,18 @@
-// frontend/src/pages/Checkout.jsx
-// Complete checkout page with all components
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { ArrowLeft, Loader2, CheckCircle } from "lucide-react";
 import { useAuth } from "../context/useAuth";
-import axiosClient from "../utils/axiosClient";
-import DeliverySelector from "../components/Checkout/DeliverySelector";
-import AddressForm from "../components/Checkout/AddressForm";
-import PaymentPromoSection from "../components/Checkout/PaymentPromoSection";
-import BillPreview from "../components/Checkout/BillPreview";
+import { cartService } from "../services/cart-service";
+import { checkoutService } from "../services/checkout-service";
+import DeliverySelector from "../components/checkout/DeliverySelector";
+import Deliverylocation from "../components/checkout/Deliverylocation";
+import AddressForm from "../components/checkout/AddressForm";
+import PaymentPromoSection from "../components/checkout/PaymentPromoSection";
+import BillPreview from "../components/checkout/BillPreview";
 import {
   calculateDeliveryFee,
   calculateTotal,
-  isNightTime,
 } from "../utils/checkoutCalculator";
 
 export default function Checkout() {
@@ -31,11 +29,24 @@ export default function Checkout() {
     customerName: "",
     customerPhone: "",
     deliveryAddress: "",
+    lat: null,
+    lng: null,
+    label: "Home",
     landmark: "",
     deliveryType: "instant",
     scheduledDateTime: "",
     paymentMode: "online",
-  });
+    });
+
+
+//Slots-scheduled delivery
+  
+
+const [availableSlots, setAvailableSlots] = useState([]);
+const [selectedSlot, setSelectedSlot] = useState("");
+
+
+  
 
   // State - Promo
   const [promoCode, setPromoCode] = useState("");
@@ -59,6 +70,86 @@ export default function Checkout() {
 
   const addressError = null;
 
+  // ============================================
+// Scheduled Delivery Slots (Auto Smart Slots)
+// ============================================
+
+
+
+
+useEffect(() => {
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  let slots = [];
+
+  // Morning
+  if (currentHour < 9) {
+    slots.push({
+      label: "Morning Slot (8:00 AM - 10:00 AM)",
+      value: "08:00",
+      date: new Date(),
+    });
+  }
+
+  // Afternoon
+  if (currentHour < 16) {
+    slots.push({
+      label: "Afternoon Slot (4:00 PM - 6:00 PM)",
+      value: "16:00",
+      date: new Date(),
+    });
+  }
+
+  // Evening
+  if (currentHour < 21) {
+    slots.push({
+      label: "Evening Slot (9:00 PM - 10:00 PM)",
+      value: "21:00",
+      date: new Date(),
+    });
+  }
+
+  // Tomorrow fallback
+  if (slots.length === 0) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    slots.push({
+      label: "Tomorrow Morning (8:00 AM - 11:00 AM)",
+      value: "08:00",
+      date: tomorrow,
+    });
+  }
+
+  setAvailableSlots(slots);
+
+  // Auto select first slot
+  if (slots.length > 0) {
+    const firstSlot = slots[0];
+
+    const yyyy = firstSlot.date.getFullYear();
+
+    const mm = String(
+      firstSlot.date.getMonth() + 1
+    ).padStart(2, "0");
+
+    const dd = String(
+      firstSlot.date.getDate()
+    ).padStart(2, "0");
+
+    const fullDateTime = `${yyyy}-${mm}-${dd}T${firstSlot.value}:00`;
+
+    setSelectedSlot(firstSlot.value);
+
+    setFormData((prev) => ({
+      ...prev,
+      scheduledDateTime: fullDateTime,
+    }));
+  }
+}, []);
+
+  
   // Fetch cart on mount
   useEffect(() => {
     if (!user) {
@@ -69,7 +160,9 @@ export default function Checkout() {
     const fetchCart = async () => {
       try {
         setCartLoading(true);
-        const response = await axiosClient.get(`/api/cart?userId=${user.id}`);
+
+        const response = await cartService.getCart(user.id);
+
         const items = response.data.items || [];
 
         if (items.length === 0) {
@@ -78,13 +171,19 @@ export default function Checkout() {
         }
 
         setCartItems(items);
-        const subtotalAmount = items.reduce(
-          (sum, item) => sum + item.price * item.quantity,
-          0
-        );
+
+        const subtotalAmount = items.reduce((sum, item) => {
+  const price = Number(item.price) || 0;
+  const quantity = Number(item.quantity) || 0;
+
+  return sum + price * quantity;
+}, 0);
+
         setSubtotal(subtotalAmount);
       } catch (err) {
-        setCartError(err.response?.data?.message || "Failed to load cart");
+        setCartError(
+          err.response?.data?.message || "Failed to load cart"
+        );
       } finally {
         setCartLoading(false);
       }
@@ -101,9 +200,12 @@ export default function Checkout() {
         ? new Date(formData.scheduledDateTime)
         : null
     );
+
     setDeliveryFee(fee);
 
-    const codFeeAmount = formData.paymentMode === "cod" ? 10 : 0;
+    const codFeeAmount =
+      formData.paymentMode === "cod" ? 10 : 0;
+
     setCodFee(codFeeAmount);
 
     const total = calculateTotal({
@@ -112,6 +214,7 @@ export default function Checkout() {
       codFee: codFeeAmount,
       promoDiscount,
     });
+
     setTotalAmount(total);
   }, [
     formData.deliveryType,
@@ -121,6 +224,34 @@ export default function Checkout() {
     promoDiscount,
   ]);
 
+  // Client-side distance & surcharge display
+  const SHOP_LAT = Number(
+  import.meta.env.VITE_SHOP_LAT || 27.429280726769314
+);
+
+const SHOP_LNG = Number(
+  import.meta.env.VITE_SHOP_LNG || 85.03281182486674
+);
+
+  const haversineKm = (lat1, lon1, lat2, lon2) => {
+    if ([lat1, lon1, lat2, lon2].some((v) => v === null || v === undefined)) return null;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  };
+
+  const distanceKm = formData.lat && formData.lng ? haversineKm(SHOP_LAT, SHOP_LNG, Number(formData.lat), Number(formData.lng)) : null;
+  const baseRadius = 15;
+  const excessKm = distanceKm && distanceKm > baseRadius ? Number((distanceKm - baseRadius).toFixed(2)) : 0;
+  const surcharge = excessKm ? excessKm * 25 : 0;
+
+  // displayed totals (don't mutate base totalAmount state)
+  const displayedDeliveryFee = Number((Number(deliveryFee || 0) + surcharge).toFixed(2));
+  const displayedTotal = Number((Number(totalAmount || 0) + surcharge).toFixed(2));
+
   // Handle promo code validation
   const handleApplyPromo = async (code) => {
     try {
@@ -128,7 +259,7 @@ export default function Checkout() {
       setPromoError("");
       setPromoValid(false);
 
-      const response = await axiosClient.post("/api/checkout/validate-promo", {
+      const response = await checkoutService.validatePromo({
         promoCode: code.trim().toUpperCase(),
         subtotal,
       });
@@ -138,7 +269,11 @@ export default function Checkout() {
       setPromoDiscount(response.data.discountAmount);
       setPromoId(response.data.promoId);
     } catch (err) {
-      setPromoError(err.response?.data?.message || "Invalid promo code");
+      setPromoError(
+        err.response?.data?.message ||
+          "Invalid promo code"
+      );
+
       setPromoValid(false);
       setPromoDiscount(0);
       setPromoId(null);
@@ -154,13 +289,26 @@ export default function Checkout() {
       return false;
     }
 
-    if (!/^\d{10}$/.test(formData.customerPhone.replace(/\D/g, ""))) {
-      setSubmitError("Please enter a valid 10-digit phone number");
+    if (
+      !/^\d{10}$/.test(
+        formData.customerPhone.replace(/\D/g, "")
+      )
+    ) {
+      setSubmitError(
+        "Please enter a valid 10-digit phoneno number"
+      );
       return false;
     }
 
     if (!formData.deliveryAddress.trim()) {
-      setSubmitError("Please enter your delivery address");
+      setSubmitError(
+        "Please enter your delivery address"
+      );
+      return false;
+    }
+
+    if (!formData.lat || !formData.lng) {
+      setSubmitError("Please select delivery location on map");
       return false;
     }
 
@@ -170,10 +318,12 @@ export default function Checkout() {
     }
 
     if (
-      formData.deliveryType === "scheduled" &&
-      !formData.scheduledDateTime
-    ) {
-      setSubmitError("Please select a delivery date and time");
+  formData.deliveryType === "scheduled" &&
+  (!formData.scheduledDateTime || !selectedSlot)
+) {
+      setSubmitError(
+        "Please select scheduled delivery date and slot"
+      );
       return false;
     }
 
@@ -195,28 +345,40 @@ export default function Checkout() {
           productId: item.product_id || item.id,
           quantity: item.quantity,
         })),
+
         customerName: formData.customerName.trim(),
         customerPhone: formData.customerPhone.trim(),
-        deliveryAddress: formData.deliveryAddress.trim(),
+        // structured payload for backend
+        lat: formData.lat,
+        lng: formData.lng,
+        address: formData.deliveryAddress.trim(),
         landmark: formData.landmark.trim(),
+        label: formData.label,
+
         deliveryType: formData.deliveryType,
-        scheduledDeliveryAt: formData.scheduledDateTime || null,
+
+        scheduledDeliveryAt:
+          formData.scheduledDateTime || null,
+
         paymentMode: formData.paymentMode,
+
         promoCodeId: promoId,
         promoDiscount,
-        deliveryFee,
+        deliveryFee: displayedDeliveryFee,
         codFee,
         subtotal,
-        totalAmount,
+        totalAmount: displayedTotal,
       };
 
-      const response = await axiosClient.post(
-        "/api/checkout/create-order",
-        orderData
-      );
+      const response = await checkoutService.createOrder(orderData);
 
       setOrderSuccess(true);
-      setOrderNumber(response.data.orderNumber);
+
+      setOrderNumber(
+        response.data.orderNumber ||
+          response.data.orderId ||
+          ""
+      );
 
       // Redirect after 3 seconds
       setTimeout(() => {
@@ -246,7 +408,7 @@ export default function Checkout() {
     return (
       <div className="min-h-screen bg-slate-50 pt-24 pb-12">
         <div className="container mx-auto px-4 max-w-4xl">
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             className="rounded-3xl border-2 border-slate-200 bg-white p-12 text-center"
@@ -254,16 +416,19 @@ export default function Checkout() {
             <h1 className="text-3xl font-bold text-slate-900 mb-4">
               Your Cart is Empty
             </h1>
+
             <p className="text-slate-600 mb-8">
-              Add some items to your cart before checking out
+              Add some items to your cart before checking
+              out
             </p>
+
             <button
               onClick={() => navigate("/products")}
               className="rounded-full bg-green-600 px-8 py-3 font-semibold text-white transition hover:bg-green-700"
             >
               Continue Shopping
             </button>
-          </motion.div>
+          </Motion.div>
         </div>
       </div>
     );
@@ -274,32 +439,42 @@ export default function Checkout() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 pt-24 pb-12">
         <div className="container mx-auto px-4 max-w-2xl">
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="rounded-3xl border-2 border-green-300 bg-white p-12 text-center shadow-xl"
           >
-            <motion.div
+            <Motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 }}
             >
               <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-            </motion.div>
+            </Motion.div>
+
             <h1 className="text-3xl font-bold text-slate-900 mb-2">
               Order Placed Successfully!
             </h1>
+
             <p className="text-slate-600 mb-6">
-              Thank you for your order. Your delivery is on the way!
+              Thank you for your order. Your delivery is
+              on the way!
             </p>
+
             <div className="rounded-2xl bg-green-50 p-4 mb-8">
-              <p className="text-sm text-slate-600 mb-1">Order Number</p>
-              <p className="text-2xl font-bold text-green-600">{orderNumber}</p>
+              <p className="text-sm text-slate-600 mb-1">
+                Order Number
+              </p>
+
+              <p className="text-2xl font-bold text-green-600">
+                {orderNumber}
+              </p>
             </div>
+
             <p className="text-slate-600 mb-4">
               Redirecting to your orders...
             </p>
-          </motion.div>
+          </Motion.div>
         </div>
       </div>
     );
@@ -310,7 +485,7 @@ export default function Checkout() {
     <div className="min-h-screen bg-slate-50 pt-24 pb-12">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Header */}
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8 flex items-center gap-4"
@@ -321,11 +496,17 @@ export default function Checkout() {
           >
             <ArrowLeft className="h-6 w-6 text-slate-900" />
           </button>
+
           <div>
-            <h1 className="text-4xl font-bold text-slate-900">Checkout</h1>
-            <p className="text-slate-600">Complete your order</p>
+            <h1 className="text-4xl font-bold text-slate-900">
+              Checkout
+            </h1>
+
+            <p className="text-slate-600">
+              Complete your order
+            </p>
           </div>
-        </motion.div>
+        </Motion.div>
 
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Main Form */}
@@ -334,9 +515,14 @@ export default function Checkout() {
             <DeliverySelector
               deliveryType={formData.deliveryType}
               setDeliveryType={(type) =>
-                setFormData((prev) => ({ ...prev, deliveryType: type }))
+                setFormData((prev) => ({
+                  ...prev,
+                  deliveryType: type,
+                }))
               }
-              scheduledDateTime={formData.scheduledDateTime}
+              scheduledDateTime={
+                formData.scheduledDateTime
+              }
               setScheduledDateTime={(dateTime) =>
                 setFormData((prev) => ({
                   ...prev,
@@ -346,7 +532,63 @@ export default function Checkout() {
               deliveryFee={deliveryFee}
             />
 
+            {/* Scheduled Slots */}
+{formData.deliveryType === "scheduled" && (
+  <Motion.div
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="rounded-3xl bg-white border border-slate-200 p-6 space-y-5"
+  >
+    <div>
+      <h2 className="text-xl font-bold text-slate-900">
+        Scheduled Delivery
+      </h2>
+
+      <p className="text-sm text-slate-500 mt-1">
+        Available delivery slots
+      </p>
+    </div>
+
+    <div className="grid gap-3 sm:grid-cols-3">
+      {availableSlots.map((slot) => (
+        <button
+          key={slot.label}
+          type="button"
+          onClick={() => {
+            setSelectedSlot(slot.value);
+
+            const yyyy = slot.date.getFullYear();
+
+            const mm = String(
+              slot.date.getMonth() + 1
+            ).padStart(2, "0");
+
+            const dd = String(
+              slot.date.getDate()
+            ).padStart(2, "0");
+
+            const fullDateTime = `${yyyy}-${mm}-${dd}T${slot.value}:00`;
+
+            setFormData((prev) => ({
+              ...prev,
+              scheduledDateTime: fullDateTime,
+            }));
+          }}
+          className={`rounded-2xl border px-4 py-4 text-sm font-semibold transition-all ${
+            selectedSlot === slot.value
+              ? "border-green-600 bg-green-50 text-green-700"
+              : "border-slate-200 bg-white text-slate-700 hover:border-green-300"
+          }`}
+        >
+          {slot.label}
+        </button>
+      ))}
+    </div>
+  </Motion.div>
+)}
+
             {/* Address Form */}
+            <Deliverylocation formData={formData} setFormData={setFormData} />
             <AddressForm
               formData={formData}
               setFormData={setFormData}
@@ -358,7 +600,10 @@ export default function Checkout() {
             <PaymentPromoSection
               paymentMode={formData.paymentMode}
               setPaymentMode={(mode) =>
-                setFormData((prev) => ({ ...prev, paymentMode: mode }))
+                setFormData((prev) => ({
+                  ...prev,
+                  paymentMode: mode,
+                }))
               }
               promoCode={promoCode}
               setPromoCode={setPromoCode}
@@ -371,17 +616,24 @@ export default function Checkout() {
 
             {/* Submit Error */}
             {submitError && (
-              <motion.div
+              <Motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-red-600"
               >
                 <span>{submitError}</span>
-              </motion.div>
+              </Motion.div>
+            )}
+
+            {distanceKm !== null && (
+              <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+                <div>Distance: {distanceKm ? distanceKm.toFixed(2) : "—"} km</div>
+                <div>Surcharge: Rs. {surcharge ? surcharge.toFixed(2) : "0.00"}</div>
+              </div>
             )}
 
             {/* Place Order Button */}
-            <motion.button
+            <Motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handlePlaceOrder}
@@ -396,7 +648,7 @@ export default function Checkout() {
               ) : (
                 "Place Order"
               )}
-            </motion.button>
+            </Motion.button>
           </div>
 
           {/* Bill Preview */}
@@ -404,13 +656,15 @@ export default function Checkout() {
             <BillPreview
               cartItems={cartItems}
               subtotal={subtotal}
-              deliveryFee={deliveryFee}
+              deliveryFee={displayedDeliveryFee}
               codFee={codFee}
               promoDiscount={promoDiscount}
-              totalAmount={totalAmount}
+              totalAmount={displayedTotal}
               customerName={formData.customerName}
               customerPhone={formData.customerPhone}
-              deliveryAddress={formData.deliveryAddress}
+              deliveryAddress={
+                formData.deliveryAddress
+              }
               landmark={formData.landmark}
               deliveryType={formData.deliveryType}
               paymentMode={formData.paymentMode}
@@ -420,5 +674,5 @@ export default function Checkout() {
         </div>
       </div>
     </div>
-  );
-}
+    );
+  }

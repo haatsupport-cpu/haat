@@ -14,6 +14,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Editor directories and files
 .vscode/*
@@ -26,3 +27,8 @@ dist-ssr
 *.sln
 *.sw?
 DEPLOYMENT_CHECKLIST.md
+ARCHITECTURE.md
+CHANGELOG.md
+deployment.md
+REFACTORING_SUMMARY.md
+VERIFICATION_CHECKLIST.md
