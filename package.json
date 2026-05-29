@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "framer-motion": "^12.40.0"
+  },
+  "devDependencies": {
+    "terser": "^5.48.0"
   }
 }
