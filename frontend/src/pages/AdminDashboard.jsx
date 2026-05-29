@@ -1,4 +1,4 @@
-import BillPreview from "../components/checkout/BillPreview";
+import BillPreview from "../components/checkout-temp/BillPreview.jsx";
 import { useEffect, useMemo, useState } from "react"
 import { motion as Motion } from "framer-motion"
 import { adminService } from "../services/admin-service"
@@ -620,9 +620,8 @@ export default function AdminDashboard() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex w-full items-center gap-3 rounded-3xl px-4 py-3 text-left transition ${
-                  activeTab === item.id ? "bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-slate-100"
-                }`}
+                className={`flex w-full items-center gap-3 rounded-3xl px-4 py-3 text-left transition ${activeTab === item.id ? "bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-slate-100"
+                  }`}
               >
                 {item.icon}
                 {item.label}
@@ -666,9 +665,8 @@ export default function AdminDashboard() {
                 setActiveTab(item.id)
                 setSidebarOpen(false)
               }}
-              className={`flex w-full items-center gap-3 rounded-3xl px-4 py-3 text-left transition ${
-                activeTab === item.id ? "bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-slate-100"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-3xl px-4 py-3 text-left transition ${activeTab === item.id ? "bg-emerald-50 text-emerald-700 shadow-sm" : "hover:bg-slate-100"
+                }`}
             >
               {item.icon}
               {item.label}
@@ -1119,170 +1117,171 @@ function OrdersView({
         </div>
       )}
       <Motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 max-w-full">
-            <div className="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="min-w-0">
-                <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Orders</h1>
-                <p className="mt-1 text-slate-500">Review order details and update fulfillment status.</p>
-              </div>
-              <div className="flex w-full min-w-0 flex-col gap-3 xl:w-auto xl:flex-row xl:items-center">
-                <Input
-                  label="Search orders"
-                  id="order-search"
-                  type="search"
-                  value={searchTerm}
-                  onChange={(e) => onSearch(e.target.value)}
-                  placeholder="Search order ID, customer, phone no or status"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const planned = planRoute();
-                    const ev = new CustomEvent("admin:routePlanned", { detail: planned });
-                    window.dispatchEvent(ev);
-                  }}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 sm:w-auto sm:min-w-[180px] sm:whitespace-nowrap"
-                >
-                  Plan Delivery Route
-                </button>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-slate-500 shadow-sm sm:p-10">Loading orders...</div>
-            ) : orders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm sm:p-12">
-                <p className="text-lg font-semibold text-slate-900">No orders yet</p>
-                <p className="mt-2 text-slate-500">Orders will populate here as customers check out.</p>
-              </div>
-            ) : (
-              <div className="max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="w-full overflow-x-auto">
-                  <table className="min-w-[1040px] table-fixed text-left text-xs text-slate-600">
-                    <thead className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 text-[10px] uppercase tracking-[0.12em] text-slate-700 border-b-2 border-emerald-200 font-bold">
-                      <tr>
-                        <th className="px-3 py-3">Order</th>
-                        <th className="px-3 py-3">Customer</th>
-                        <th className="px-3 py-3">Phone</th>
-                        <th className="px-3 py-3">Amount</th>
-                        <th className="px-3 py-3">Order Status</th>
-                        <th className="px-3 py-3">Payment Status</th>
-                        <th className="px-3 py-3">Placed</th>
-                        <th className="px-3 py-3">Location</th>
-                        <th className="px-3 py-3">Update Status</th>
-                        <th className="px-3 py-3">Update Payment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map((order, idx) => {
-                        const loc = order.location || parseLocationString(order.deliveryAddress || order.deliveryAddress_raw || "") || {};
-                        const latitude = Number(loc?.lat ?? loc?.latitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[1] : undefined));
-                        const longitude = Number(loc?.lng ?? loc?.longitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[0] : undefined));
-                        const hasValidCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
-                        const shortAddress = loc.address?.split(",").slice(0, 2).join(", ") || "No address";
-                        let mapsHref = "";
-                        if (hasValidCoordinates) {
-                          mapsHref = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-                        }
-                        return (
-                          <tr key={order.id || order._id} className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                            <td className="px-3 py-3 max-w-[120px] truncate whitespace-nowrap">
-                              <div className="font-semibold text-slate-900 truncate max-w-[120px]">
-                                #{order.orderNumber || (order.id || order._id)?.slice(-8)}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 max-w-[120px] truncate">
-                              <div className="flex flex-col">
-                                <span className="max-w-[120px] truncate font-medium text-slate-900">{order.customerName || order.customer_name || "Guest"}</span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap text-slate-600">{order.customerPhone || order.phone_number || "—"}</td>
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <span className="font-semibold text-emerald-600">{formatCurrency(order.totalAmount ?? order.total_amount ?? 0)}</span>
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <Badge label={getStatusLabel(order.status)} variant={order.status} className="px-2 py-0.5 text-[11px]" />
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap">
-                              <Badge label={getPaymentLabel(order.paymentStatus || order.payment || "pending")} variant={order.paymentStatus || order.payment || "pending"} className="px-2 py-0.5 text-[11px]" />
-                            </td>
-                            <td className="px-3 py-3 whitespace-nowrap text-slate-500 text-xs">
-                              <button
-                                type="button"
-                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-50 hover:text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                title={formatDate(order.createdAt ?? order.created_at)}
-                                onClick={() => {
-                                  setSelectedBill(order);
-                                  setShowBillPreview(true);
-                                }}
-                              >
-                                🧾 Bill Preview
-                              </button>
-                              <div className="mt-1 text-[10px] text-slate-400">{formatDate(order.createdAt ?? order.created_at)}</div>
-                            </td>
-                            <td className="px-3 py-3 max-w-[180px]">
-  {hasValidCoordinates ? (
-    <div className="space-y-1 text-xs leading-tight">
-      <p className="font-medium text-slate-800 truncate">{shortAddress}</p>
-      <p className="text-[11px] text-slate-400">
-        {latitude.toFixed(6)}, {longitude.toFixed(6)}
-      </p>
-      {loc.landmark && (
-        <p className="truncate text-slate-500">
-          {loc.landmark}
-        </p>
-      )}
-      <a
-        href={`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex text-emerald-600 hover:underline font-semibold"
-        title={`Open exact location in Google Maps (${latitude}, ${longitude})`}
-      >
-        📍 Open in Maps
-      </a>
-    </div>
-  ) : (
-    <span className="text-xs text-slate-400">
-      No location
-    </span>
-  )}
-</td>
-
-                    <td className="px-3 py-3 min-w-[140px]">
-                      <select
-                        value={order.status}
-                        onChange={(e) => onUpdateStatus(order._id, e.target.value)}
-                        className="w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-emerald-400 focus:border-emerald-500 focus:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 cursor-pointer shadow-sm hover:shadow-md"
-                      >
-                        {orderStatusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {getStatusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-
-                    <td className="px-3 py-3 min-w-[140px]">
-                      <select
-                        value={order.paymentStatus}
-                        onChange={(e) => onUpdatePaymentStatus(order._id, e.target.value)}
-                        className="w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-emerald-400 focus:border-emerald-500 focus:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 cursor-pointer shadow-sm hover:shadow-md"
-                      >
-                        {orderPaymentOptions.map((payment) => (
-                          <option key={payment} value={payment}>
-                            {getPaymentLabel(payment)}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                )})}
-              </tbody>
-            </table>
+        <div className="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Orders</h1>
+            <p className="mt-1 text-slate-500">Review order details and update fulfillment status.</p>
+          </div>
+          <div className="flex w-full min-w-0 flex-col gap-3 xl:w-auto xl:flex-row xl:items-center">
+            <Input
+              label="Search orders"
+              id="order-search"
+              type="search"
+              value={searchTerm}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search order ID, customer, phone no or status"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const planned = planRoute();
+                const ev = new CustomEvent("admin:routePlanned", { detail: planned });
+                window.dispatchEvent(ev);
+              }}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 sm:w-auto sm:min-w-[180px] sm:whitespace-nowrap"
+            >
+              Plan Delivery Route
+            </button>
           </div>
         </div>
-      )}
-    </Motion.div>
+
+        {loading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-slate-500 shadow-sm sm:p-10">Loading orders...</div>
+        ) : orders.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm sm:p-12">
+            <p className="text-lg font-semibold text-slate-900">No orders yet</p>
+            <p className="mt-2 text-slate-500">Orders will populate here as customers check out.</p>
+          </div>
+        ) : (
+          <div className="max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-[1040px] table-fixed text-left text-xs text-slate-600">
+                <thead className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 text-[10px] uppercase tracking-[0.12em] text-slate-700 border-b-2 border-emerald-200 font-bold">
+                  <tr>
+                    <th className="px-3 py-3">Order</th>
+                    <th className="px-3 py-3">Customer</th>
+                    <th className="px-3 py-3">Phone</th>
+                    <th className="px-3 py-3">Amount</th>
+                    <th className="px-3 py-3">Order Status</th>
+                    <th className="px-3 py-3">Payment Status</th>
+                    <th className="px-3 py-3">Placed</th>
+                    <th className="px-3 py-3">Location</th>
+                    <th className="px-3 py-3">Update Status</th>
+                    <th className="px-3 py-3">Update Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order, idx) => {
+                    const loc = order.location || parseLocationString(order.deliveryAddress || order.deliveryAddress_raw || "") || {};
+                    const latitude = Number(loc?.lat ?? loc?.latitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[1] : undefined));
+                    const longitude = Number(loc?.lng ?? loc?.longitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[0] : undefined));
+                    const hasValidCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+                    const shortAddress = loc.address?.split(",").slice(0, 2).join(", ") || "No address";
+                    let mapsHref = "";
+                    if (hasValidCoordinates) {
+                      mapsHref = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+                    }
+                    return (
+                      <tr key={order.id || order._id} className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                        <td className="px-3 py-3 max-w-[120px] truncate whitespace-nowrap">
+                          <div className="font-semibold text-slate-900 truncate max-w-[120px]">
+                            #{order.orderNumber || (order.id || order._id)?.slice(-8)}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 max-w-[120px] truncate">
+                          <div className="flex flex-col">
+                            <span className="max-w-[120px] truncate font-medium text-slate-900">{order.customerName || order.customer_name || "Guest"}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-slate-600">{order.customerPhone || order.phone_number || "—"}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <span className="font-semibold text-emerald-600">{formatCurrency(order.totalAmount ?? order.total_amount ?? 0)}</span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <Badge label={getStatusLabel(order.status)} variant={order.status} className="px-2 py-0.5 text-[11px]" />
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <Badge label={getPaymentLabel(order.paymentStatus || order.payment || "pending")} variant={order.paymentStatus || order.payment || "pending"} className="px-2 py-0.5 text-[11px]" />
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-slate-500 text-xs">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-50 hover:text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                            title={formatDate(order.createdAt ?? order.created_at)}
+                            onClick={() => {
+                              setSelectedBill(order);
+                              setShowBillPreview(true);
+                            }}
+                          >
+                            🧾 Bill Preview
+                          </button>
+                          <div className="mt-1 text-[10px] text-slate-400">{formatDate(order.createdAt ?? order.created_at)}</div>
+                        </td>
+                        <td className="px-3 py-3 max-w-[180px]">
+                          {hasValidCoordinates ? (
+                            <div className="space-y-1 text-xs leading-tight">
+                              <p className="font-medium text-slate-800 truncate">{shortAddress}</p>
+                              <p className="text-[11px] text-slate-400">
+                                {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                              </p>
+                              {loc.landmark && (
+                                <p className="truncate text-slate-500">
+                                  {loc.landmark}
+                                </p>
+                              )}
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex text-emerald-600 hover:underline font-semibold"
+                                title={`Open exact location in Google Maps (${latitude}, ${longitude})`}
+                              >
+                                📍 Open in Maps
+                              </a>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              No location
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-3 min-w-[140px]">
+                          <select
+                            value={order.status}
+                            onChange={(e) => onUpdateStatus(order._id, e.target.value)}
+                            className="w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-emerald-400 focus:border-emerald-500 focus:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 cursor-pointer shadow-sm hover:shadow-md"
+                          >
+                            {orderStatusOptions.map((status) => (
+                              <option key={status} value={status}>
+                                {getStatusLabel(status)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td className="px-3 py-3 min-w-[140px]">
+                          <select
+                            value={order.paymentStatus}
+                            onChange={(e) => onUpdatePaymentStatus(order._id, e.target.value)}
+                            className="w-full rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-all hover:border-emerald-400 focus:border-emerald-500 focus:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 cursor-pointer shadow-sm hover:shadow-md"
+                          >
+                            {orderPaymentOptions.map((payment) => (
+                              <option key={payment} value={payment}>
+                                {getPaymentLabel(payment)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Motion.div>
     </>
   )
 }
@@ -1380,33 +1379,33 @@ function PromoCodesView({ promos, form, setForm, editing, status, loading, onSub
                 <option value="fixed">Fixed</option>
               </select>
             </label>
-           <div className="flex flex-col gap-2">
-  <label htmlFor="promo-delivery-options" className="text-sm font-medium text-slate-700">
-    Delivery Options
-  </label>
-  <select
-    id="promo-delivery-options"
-    value={
-      form.deliveryOptions &&
-      form.deliveryOptions.includes("instant") &&
-      form.deliveryOptions.includes("scheduled")
-        ? "both"
-        : form.deliveryOptions?.[0] || "both"
-    }
-    onChange={(e) => {
-      const val = e.target.value;
-      setForm({
-        ...form,
-        deliveryOptions: val === "both" ? ["instant", "scheduled"] : [val],
-      });
-    }}
-    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-green-500 focus:outline-none"
-  >
-    <option value="both">Both (Instant & Scheduled)</option>
-    <option value="instant">Instant Only</option>
-    <option value="scheduled">Scheduled Only</option>
-  </select>
-</div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="promo-delivery-options" className="text-sm font-medium text-slate-700">
+                Delivery Options
+              </label>
+              <select
+                id="promo-delivery-options"
+                value={
+                  form.deliveryOptions &&
+                    form.deliveryOptions.includes("instant") &&
+                    form.deliveryOptions.includes("scheduled")
+                    ? "both"
+                    : form.deliveryOptions?.[0] || "both"
+                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm({
+                    ...form,
+                    deliveryOptions: val === "both" ? ["instant", "scheduled"] : [val],
+                  });
+                }}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-green-500 focus:outline-none"
+              >
+                <option value="both">Both (Instant & Scheduled)</option>
+                <option value="instant">Instant Only</option>
+                <option value="scheduled">Scheduled Only</option>
+              </select>
+            </div>
             <Input label="Discount value" id="promo-discount" type="number" min="0" step="0.01" value={form.discountValue} onChange={(e) => setForm({ ...form, discountValue: e.target.value })} />
             <Input label="Minimum order value" id="promo-minimum" type="number" min="0" step="0.01" value={form.minimumOrderValue} onChange={(e) => setForm({ ...form, minimumOrderValue: e.target.value })} />
             <Input label="Expiry date" id="promo-expiry" type="date" value={form.expiryDate} onChange={(e) => setForm({ ...form, expiryDate: e.target.value })} />
