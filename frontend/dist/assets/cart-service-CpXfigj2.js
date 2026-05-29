@@ -1,0 +1,1 @@
+import{b as t}from"./index-BuM2SiuA.js";const e=t=>t?{params:{userId:t}}:void 0,r={getCart:r=>t.get("/cart",e(r)),addItem:({userId:e,productId:r,quantity:a})=>t.post("/cart",{userId:e,productId:r,quantity:a}),updateItemQuantity:(e,r)=>t.put(`/cart/${e}`,r),removeItem:(r,a)=>t.delete(`/cart/${r}`,e(a))};export{r as c};
