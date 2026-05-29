@@ -14,6 +14,8 @@ const getDynamicAllowedOrigins = () => {
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "http://127.0.0.1:3000",
+    // Add Vercel production URL
+    "https://haat-liart.vercel.app",
   ];
 
   // Add configured origins
@@ -36,6 +38,7 @@ export const getCorsOptions = () => ({
 
     const allowedOrigins = getDynamicAllowedOrigins();
 
+    // Allow if origin is in allowedOrigins
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
@@ -47,10 +50,16 @@ export const getCorsOptions = () => ({
       }
     }
 
+    // For preflight OPTIONS requests, allow if origin is present in allowedOrigins
+    // This helps with dynamic handshakes for CORS
+    if (typeof origin === "string" && allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
     // Production: strict CORS
     return callback(new Error("CORS not allowed"), false);
   },
-  credentials: CONFIG.CORS_CREDENTIALS,
+  credentials: true, // Always allow credentials for session/cookies
   methods: CONFIG.CORS_METHODS,
   allowedHeaders: CONFIG.CORS_HEADERS,
   maxAge: 3600, // 1 hour
