@@ -1,42 +1,37 @@
 import axios from "axios";
 
 const AUTH_TOKEN_KEY = "authToken";
-const trimTrailingSlash = (value) => value.replace(/\/$/, "");
 
-const normalizeApiBaseUrl = (value) => {
-  const raw = trimTrailingSlash(value || "/api");
-  const withLeadingSlash = raw.startsWith("http") || raw.startsWith("/") ? raw : `/${raw}`;
+/**
+ * ENV API URL (must end with /api)
+ */
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL ||
+  "https://haatonline-lhyy.onrender.com/api"
+).replace(/\/$/, "");
 
-  if (/\/api$/i.test(withLeadingSlash)) return withLeadingSlash;
-  return `${withLeadingSlash}/api`;
-};
+/**
+ * Asset base (backend origin only)
+ */
+const API_ORIGIN = API_BASE_URL.replace(/\/api$/, "");
 
-const getOriginFromApiBaseUrl = (value) => {
-  if (!/^https?:\/\//i.test(value)) return "";
-
-  try {
-    return new URL(value).origin;
-  } catch {
-    return "";
-  }
-};
-
-const API_BASE_URL = normalizeApiBaseUrl(
-  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
-);
-const API_ORIGIN =
-  import.meta.env.VITE_API_ORIGIN ||
-  getOriginFromApiBaseUrl(API_BASE_URL) ||
-  (import.meta.env.DEV ? "http://localhost:5000" : window.location.origin);
-const ASSET_BASE_URL = trimTrailingSlash(API_ORIGIN);
-
+/**
+ * Axios instance
+ */
 export const axiosClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY);
+/**
+ * TOKEN HANDLING
+ */
+export const getAuthToken = () =>
+  localStorage.getItem(AUTH_TOKEN_KEY);
 
 export const setAuthToken = (token) => {
   if (token) {
@@ -48,28 +43,40 @@ export const setAuthToken = (token) => {
   }
 };
 
+/**
+ * ASSET URL FIX
+ */
 export const resolveAssetUrl = (path) => {
   if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${ASSET_BASE_URL}${normalizedPath}`;
+  if (path.startsWith("http")) return path;
+
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${API_ORIGIN}${normalized}`;
 };
 
+/**
+ * REQUEST INTERCEPTOR
+ */
 axiosClient.interceptors.request.use((config) => {
   const token = getAuthToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
+/**
+ * RESPONSE INTERCEPTOR
+ */
 axiosClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) {
       setAuthToken(null);
     }
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 
