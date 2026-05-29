@@ -30,6 +30,7 @@ export const CONFIG = {
   // Frontend/CORS
   CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
   FRONTEND_URL: process.env.FRONTEND_URL,
+  // FIXED: Safeguard fallback to prevent breaking cross-domain tools
   API_BASE_URL: process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`,
   ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || "").split(",").filter(Boolean),
 
@@ -41,11 +42,9 @@ export const CONFIG = {
 
   // Rate Limiting
   RATE_LIMIT: {
-    // Development: very relaxed (allow StrictMode double-calls, fast iteration)
-    // Production: aggressive to prevent abuse
-    WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-    MAX_REQUESTS: isProduction ? 100 : 10000, // Global limit
-    MAX_AUTH_REQUESTS: isProduction ? 20 : 10000, // Auth endpoints limit
+    WINDOW_MS: 15 * 60 * 1000,
+    MAX_REQUESTS: isProduction ? 100 : 10000,
+    MAX_AUTH_REQUESTS: isProduction ? 20 : 10000,
     SKIP_SUCCESSFUL_REQUESTS: false,
     SKIP_FAILED_REQUESTS: false,
   },
@@ -58,7 +57,7 @@ export const CONFIG = {
   // Security
   ENABLE_HELMET: isProduction,
   ENABLE_COMPRESSION: isProduction,
-  TRUST_PROXY: isProduction ? 1 : false,
+  TRUST_PROXY: isProduction ? true : false, // FIXED: Explicitly support cloud proxy chains
 
   // CORS
   CORS_CREDENTIALS: true,
@@ -67,16 +66,21 @@ export const CONFIG = {
 
   // Cookies
   SECURE_COOKIES: isProduction,
-  SAME_SITE: isProduction ? "Strict" : "Lax",
+  SAME_SITE: isProduction ? "None" : "Lax", // FIXED: "Strict" blocks cross-domain Vercel -> Render cookies
 };
 
-// Validation
+// Validation Runtime Guards
 if (!CONFIG.JWT_SECRET) {
-  throw new Error("JWT_SECRET is required in environment variables");
+  throw new Error("CRITICAL STARTUP ERROR: JWT_SECRET is required in environment variables");
 }
 
 if (!CONFIG.MONGO_URI) {
-  throw new Error("MONGO_URI is required in environment variables");
+  throw new Error("CRITICAL STARTUP ERROR: MONGO_URI is required in environment variables");
+}
+
+// Production Warning
+if (isProduction && (!process.env.API_BASE_URL || CONFIG.API_BASE_URL.includes("localhost"))) {
+  console.warn("⚠️ WARNING: API_BASE_URL is dropping back to localhost in a production environment!");
 }
 
 export default CONFIG;

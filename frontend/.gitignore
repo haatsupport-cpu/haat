@@ -32,3 +32,6 @@ CHANGELOG.md
 deployment.md
 REFACTORING_SUMMARY.md
 VERIFICATION_CHECKLIST.md
+
+.vercel
+.env*
