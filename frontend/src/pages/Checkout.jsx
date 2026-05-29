@@ -6,10 +6,10 @@ import { useAuth } from "../context/useAuth";
 import { cartService } from "../services/cart-service";
 import { checkoutService } from "../services/checkout-service";
 import { orderService } from "../services/order-service";
-import DeliverySelector from "../components/checkout/DeliverySelector";
-import Deliverylocation from "../components/checkout/Deliverylocation";
-import AddressForm from "../components/checkout/AddressForm";
-import PaymentPromoSection from "../components/checkout/PaymentPromoSection";
+import DeliverySelector from "../components/checkout-temp/DeliverySelector";
+import Deliverylocation from "../components/checkout-temp/Deliverylocation";
+import AddressForm from "../components/checkout-temp/AddressForm";
+import PaymentPromoSection from "../components/checkout-temp/PaymentPromoSection";
 import {
   calculateDeliveryFee,
   calculateTotal,
@@ -496,11 +496,10 @@ export default function Checkout() {
                           scheduledDateTime: fullDateTime,
                         }));
                       }}
-                      className={`rounded-2xl border px-4 py-4 text-sm font-semibold transition-all ${
-                        selectedSlot === slot.value
-                          ? "border-green-600 bg-green-50 text-green-700"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-green-300"
-                      }`}
+                      className={`rounded-2xl border px-4 py-4 text-sm font-semibold transition-all ${selectedSlot === slot.value
+                        ? "border-green-600 bg-green-50 text-green-700"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-green-300"
+                        }`}
                     >
                       {slot.label}
                     </button>
@@ -514,7 +513,7 @@ export default function Checkout() {
               formData={formData}
               setFormData={setFormData}
               error={addressError}
-              setError={() => {}}
+              setError={() => { }}
             />
 
             <PaymentPromoSection
@@ -577,7 +576,7 @@ export default function Checkout() {
           <div className="relative">
             <div className="lg:sticky lg:top-24 rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-100/50 space-y-4">
               <h3 className="text-lg font-bold text-slate-900">Summary Breakdown</h3>
-              
+
               <div className="space-y-2 text-sm border-b border-slate-100 pb-4">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal</span>
