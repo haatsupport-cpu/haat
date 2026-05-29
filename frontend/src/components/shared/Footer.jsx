@@ -79,13 +79,12 @@ export default function Footer() {
         />
 
         <p className="mt-4 text-sm leading-6 text-slate-400">
-          Fresh groceries and essentials delivered quickly across Nepal with
-          reliable same-day service.
+          Fresh groceries and daily essentials delivered quickly across Hetauda with fast, reliable, and convenient local delivery service.
         </p>
 
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-[#2ab600]/20 bg-[#2ab600]/10 px-3 py-2 text-xs text-[#9dff7c] w-fit">
           <span className="h-2 w-2 rounded-full bg-[#2ab600] animate-pulse" />
-          Delivering across Nepal
+          Delivering across Hetauda
         </div>
 
         <div className="mt-5 flex items-center gap-3">

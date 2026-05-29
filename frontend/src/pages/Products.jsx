@@ -154,7 +154,7 @@ export default function Products() {
           <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-red-500/40 to-transparent" />
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 text-red-400 mb-4 text-xl">⚠️</div>
           <p className="text-gray-300 font-medium tracking-wide">{error}</p>
-          <button 
+          <button
             onClick={() => fetchProducts(selectedCategory)}
             className="mt-5 px-5 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white rounded-xl text-xs font-semibold tracking-wider uppercase transition-all duration-300"
           >
@@ -179,12 +179,9 @@ export default function Products() {
       <header className="relative border-b border-white/[0.05] bg-black/[0.15] backdrop-blur-md sticky top-0 z-40 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex flex-col">
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-green-400 to-emerald-500 drop-shadow-[0_2px_10px_rgba(34,197,94,0.15)] animate-none">
-              HaatOnline <span className="text-base md:text-lg inline-block animate-bounce">🛒</span>
-            </h1>
-            <p className="text-[11px] md:text-xs text-gray-400 font-medium tracking-wider uppercase mt-0.5">
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#2ab600] via-[#34d100] to-[#7dff5a] drop-shadow-[0_2px_10px_rgba(42,182,0,0.25)] animate-none">
               सबै Groceries, घर बसी बसी
-            </p>
+            </h1>
           </div>
 
           {/* Desktop Categories Anchor */}
@@ -220,11 +217,10 @@ export default function Products() {
                     setSelectedCategory(category.id);
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-200 flex items-center justify-between text-sm font-medium ${
-                    isSelected
-                      ? "bg-gradient-to-r from-green-500/20 to-emerald-500/10 text-green-400 border-green-500/30 font-semibold"
-                      : "bg-white/[0.02] text-gray-400 border-transparent hover:text-white"
-                  }`}
+                  className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-200 flex items-center justify-between text-sm font-medium ${isSelected
+                    ? "bg-gradient-to-r from-green-500/20 to-emerald-500/10 text-green-400 border-green-500/30 font-semibold"
+                    : "bg-white/[0.02] text-gray-400 border-transparent hover:text-white"
+                    }`}
                 >
                   <span>{getCategoryDisplayLabel(category.name)}</span>
                   {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_#22c55e]" />}
@@ -245,11 +241,10 @@ export default function Products() {
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategory(category.id)}
-                  className={`px-5 py-2 rounded-full border transition-all duration-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500/40 ${
-                    isSelected
-                      ? "bg-gradient-to-r from-green-500 to-emerald-600 text-black border-transparent shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:brightness-110 transform scale-105"
-                      : "bg-white/[0.03] text-gray-400 border-white/[0.05] hover:border-green-500/40 hover:text-white hover:bg-white/[0.06]"
-                  }`}
+                  className={`px-5 py-2 rounded-full border transition-all duration-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-green-500/40 ${isSelected
+                    ? "bg-gradient-to-r from-green-500 to-emerald-600 text-black border-transparent shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:brightness-110 transform scale-105"
+                    : "bg-white/[0.03] text-gray-400 border-white/[0.05] hover:border-green-500/40 hover:text-white hover:bg-white/[0.06]"
+                    }`}
                 >
                   {getCategoryDisplayLabel(category.name)}
                 </button>

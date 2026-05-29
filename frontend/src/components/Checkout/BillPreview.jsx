@@ -44,6 +44,7 @@ export default function BillPreview({
         {cartItems.map((item) => {
           const price = Number(item.price) || 0;
           const quantity = Number(item.quantity) || 0;
+          const unit = item.unit || "";
 
           return (
             <div
@@ -51,8 +52,9 @@ export default function BillPreview({
               className="flex justify-between text-sm text-slate-700"
             >
               <span>
-                {item.name} x{quantity}
+                {item.name} x{quantity} /{unit}
               </span>
+
 
               <span className="font-medium">
                 {formatCurrency(price * quantity)}

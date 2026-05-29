@@ -1,4 +1,5 @@
 import { motion as Motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -11,6 +12,13 @@ import {
 } from "recharts";
 
 export default function AnalyticsCharts({ chartData = [] }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   if (!chartData || chartData.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-slate-200 bg-white/80 p-8 text-center shadow-sm">
@@ -24,7 +32,7 @@ export default function AnalyticsCharts({ chartData = [] }) {
     <Motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6"
+      className="min-w-0 bg-white rounded-3xl border border-slate-200 shadow-sm p-6"
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-6">
         <div>
@@ -33,8 +41,9 @@ export default function AnalyticsCharts({ chartData = [] }) {
         </div>
       </div>
 
-      <div className="h-[320px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-[320px] min-w-[1px] w-full">
+        {ready && (
+        <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
@@ -59,6 +68,7 @@ export default function AnalyticsCharts({ chartData = [] }) {
             <Area type="monotone" dataKey="orders" name="Orders" stroke="#0284c7" fillOpacity={1} fill="url(#ordersGradient)" strokeWidth={3} />
           </AreaChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Motion.div>
   );

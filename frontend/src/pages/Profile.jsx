@@ -9,6 +9,7 @@ import {
 
 import { useAuth } from "../context/useAuth"
 import { authService } from "../services/auth-service"
+import { checkoutService } from "../services/checkout-service"
 import { orderService } from "../services/order-service"
 import { resolveAssetUrl } from "../services/api"
 import { storageService } from "../services/storage-service"
@@ -45,6 +46,8 @@ export default function Profile() {
   const [imageError, setImageError] = useState("")
 
   const [orders, setOrders] = useState([])
+  const [promos, setPromos] = useState([])
+  const [promoMessage, setPromoMessage] = useState("")
 
   useEffect(() => {
     return () => {
@@ -74,7 +77,7 @@ export default function Profile() {
           ...prev,
           name: userData?.name || "",
           email: userData?.email || "",
-          phoneno:userData?.phoneno || "",
+          phoneno: userData?.phoneno || "",
           photo: userData?.photo || "",
         }))
 
@@ -105,6 +108,13 @@ export default function Profile() {
             "Failed to fetch orders",
             err
           )
+        }
+
+        try {
+          const promoRes = await checkoutService.getMyPromos()
+          setPromos(promoRes.data?.promos || [])
+        } catch {
+          setPromos([])
         }
       } catch (error) {
         console.error(
@@ -200,6 +210,20 @@ export default function Profile() {
     }
   }
 
+  const handleCopyPromo = async (code) => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setPromoMessage(`${code} copied`)
+    } catch {
+      setPromoMessage("Unable to copy code")
+    }
+  }
+
+  const handleApplyPromo = (code) => {
+    localStorage.setItem("checkoutPromoCode", code)
+    setPromoMessage(`${code} ready for checkout`)
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f8fafc]">
@@ -244,7 +268,7 @@ export default function Profile() {
 
               <p className="mt-1 text-gray-500">
                 {formData.phoneno}
-               
+
               </p>
               <p className="mt-1 text-gray-500">
                 {formData.email}
@@ -397,6 +421,79 @@ export default function Profile() {
 
         {/* ORDERS */}
         <div className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">My Promos</h2>
+              <p className="text-sm text-gray-500">Available offers for your next order</p>
+            </div>
+            {promoMessage && <p className="text-sm font-medium text-[#2ab600]">{promoMessage}</p>}
+          </div>
+
+          {promos.length === 0 ? (
+            <div className="py-10 text-center text-gray-500">
+              No promos available
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {promos.map((promo) => {
+                const disabled = promo.status !== "Active"
+                return (
+                  <div
+                    key={promo.id || promo.code}
+                    className="rounded-2xl border border-gray-200 bg-gray-50 p-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+                          Promo Code
+                        </p>
+                        <h3 className="mt-2 text-2xl font-black text-gray-900">
+                          {promo.code}
+                        </h3>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${promo.status === "Active"
+                          ? "bg-[#2ab600]/10 text-[#2ab600]"
+                          : promo.status === "Used"
+                            ? "bg-blue-50 text-blue-600"
+                            : "bg-red-50 text-red-600"
+                        }`}>
+                        {promo.status}
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-2 text-sm text-gray-600">
+                      <p>{promo.discountText}</p>
+                      <p>Minimum order: Rs. {promo.minOrderAmount || 0}</p>
+                      <p>
+                        Expires: {promo.expiryDate ? new Date(promo.expiryDate).toLocaleDateString() : "No expiry"}
+                      </p>
+                    </div>
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleCopyPromo(promo.code)}
+                        className="rounded-2xl border border-[#2ab600] px-4 py-2 text-sm font-semibold text-[#2ab600] disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+                      >
+                        Copy Code
+                      </button>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleApplyPromo(promo.code)}
+                        className="rounded-2xl bg-[#2ab600] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ORDERS */}
+        <div className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-6 text-xl font-bold">
             My Orders
           </h2>
@@ -451,7 +548,7 @@ export default function Profile() {
                       </td>
 
                       <td className="py-4 capitalize">
-                         {order.paymentStatus || "Pending"}
+                        {order.paymentStatus || "Pending"}
                       </td>
 
                       <td className="py-4 font-semibold">

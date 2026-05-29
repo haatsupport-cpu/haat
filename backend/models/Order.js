@@ -28,6 +28,18 @@ const orderSchema = new mongoose.Schema(
     customerPhone: { type: String, required: true, trim: true },
     deliveryAddress: { type: String, required: true, trim: true },
     landmark: { type: String, required: true, trim: true },
+    // Standardized location object
+    location: {
+      lat: { type: Number },
+      lng: { type: Number },
+      address: { type: String },
+      label: { type: String },
+      landmark: { type: String },
+      coordinates: {
+        type: [Number], // [lng, lat] for GeoJSON
+        default: undefined,
+      },
+    },
     deliveryType: { type: String, enum: ["instant", "scheduled"], default: "instant" },
     scheduledDeliveryAt: { type: Date, default: null },
     paymentMode: { type: String, required: true, trim: true },

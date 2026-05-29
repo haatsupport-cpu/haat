@@ -7,30 +7,47 @@
  * @param {number} subtotal - Order subtotal
  * @returns {Object} { discountAmount: number, error: string|null }
  */
+// backend/utils/promoValidator.js
+// Utility for validating and calculating promo discounts
+
+/**
+ * Calculate discount amount based on promo code and subtotal
+ * @param {Object} promo - Promo code record from database
+ * @param {number} subtotal - Order subtotal
+ * @returns {Object} { discountAmount: number, error: string|null }
+ */
 export const calculatePromoDiscount = (promo, subtotal) => {
   if (!promo) {
     return { discountAmount: 0, error: null };
   }
 
+  const minOrderAmount = Number(promo.minOrderAmount ?? promo.min_order_amount ?? 0);
+  const discountType = promo.discountType ?? promo.discount_type ?? "percentage";
+  const discountValue = Number(promo.discountValue ?? promo.discount_value ?? 0);
+  const maxDiscountAmount = Number(promo.maxDiscountAmount ?? promo.max_discount_amount ?? 0);
+  const safeSubtotal = Number(subtotal) || 0;
+
   // Check minimum order amount
-  if (subtotal < (promo.min_order_amount || 0)) {
+  if (safeSubtotal < minOrderAmount) {
     return {
       discountAmount: 0,
-      error: `Minimum order amount Rs. ${promo.min_order_amount} required`,
+      error: `Minimum order amount Rs. ${minOrderAmount} required`,
     };
   }
 
   let discountAmount = 0;
 
-  if (promo.discount_type === "percentage") {
-    discountAmount = (subtotal * promo.discount_value) / 100;
-    // Cap at max_discount_amount if set
-    if (promo.max_discount_amount) {
-      discountAmount = Math.min(discountAmount, promo.max_discount_amount);
+  if (discountType === "percentage") {
+    discountAmount = (safeSubtotal * discountValue) / 100;
+    // Cap at maxDiscountAmount if set
+    if (maxDiscountAmount > 0) {
+      discountAmount = Math.min(discountAmount, maxDiscountAmount);
     }
-  } else if (promo.discount_type === "fixed") {
-    discountAmount = promo.discount_value;
+  } else if (discountType === "fixed") {
+    discountAmount = discountValue;
   }
+
+  discountAmount = Math.min(discountAmount, safeSubtotal);
 
   return {
     discountAmount: Math.round(discountAmount * 100) / 100,
@@ -41,23 +58,38 @@ export const calculatePromoDiscount = (promo, subtotal) => {
 /**
  * Validate promo code eligibility
  * @param {Object} promo - Promo code record from database
+ * @param {string} [deliveryType] - Checkout delivery type (instant/scheduled)
  * @returns {Object} { valid: boolean, error: string|null }
  */
-export const validatePromoCode = (promo) => {
+export const validatePromoCode = (promo, deliveryType = null) => {
   if (!promo) {
     return { valid: false, error: "Promo code not found" };
   }
 
-  if (!promo.is_active) {
+  const isActive = promo.isActive ?? promo.is_active;
+  const expiresAt = promo.expiresAt ?? promo.expiry_date;
+  const maxUses = Number(promo.maxUses ?? promo.max_uses ?? 0);
+  const uses = Number(promo.uses ?? promo.current_uses ?? 0);
+
+  if (!isActive) {
     return { valid: false, error: "Promo code is inactive" };
   }
 
-  if (new Date(promo.expiry_date) < new Date()) {
+  if (expiresAt && new Date(expiresAt) < new Date()) {
     return { valid: false, error: "Promo code has expired" };
   }
 
-  if (promo.max_uses && promo.current_uses >= promo.max_uses) {
+  if (maxUses && uses >= maxUses) {
     return { valid: false, error: "Promo code usage limit reached" };
+  }
+
+  if (deliveryType) {
+    const deliveryOptions = promo.deliveryOptions ?? ["instant", "scheduled"];
+    const normalizedType = deliveryType.toLowerCase();
+    if (!deliveryOptions.includes(normalizedType)) {
+      const allowedStr = deliveryOptions.join(" or ");
+      throw new Error(`This coupon is only valid for ${allowedStr} delivery orders.`);
+    }
   }
 
   return { valid: true, error: null };
@@ -71,20 +103,28 @@ export const validatePromoCode = (promo) => {
 export const formatPromoDetails = (promo) => {
   if (!promo) return null;
 
+  const discountType = promo.discountType ?? promo.discount_type ?? "percentage";
+  const discountValue = promo.discountValue ?? promo.discount_value;
+  const maxUses = promo.maxUses ?? promo.max_uses;
+  const uses = promo.uses ?? promo.current_uses;
   const discountText =
-    promo.discount_type === "percentage"
-      ? `${promo.discount_value}% off`
-      : `Rs. ${promo.discount_value} off`;
+    discountType === "percentage"
+      ? `${discountValue}% off`
+      : `Rs. ${discountValue} off`;
 
   return {
-    id: promo.id,
+    id: promo.id ?? promo._id?.toString(),
     code: promo.code,
     description: promo.description,
     discountText,
-    minOrderAmount: promo.min_order_amount,
-    expiryDate: new Date(promo.expiry_date),
-    usesRemaining: promo.max_uses
-      ? Math.max(0, promo.max_uses - promo.current_uses)
+    discountType,
+    discountValue,
+    minOrderAmount: promo.minOrderAmount ?? promo.min_order_amount ?? 0,
+    deliveryOptions: promo.deliveryOptions ?? ["instant", "scheduled"],
+    expiryDate: promo.expiresAt ?? promo.expiry_date ?? null,
+    activeStatus: promo.isActive ?? promo.is_active,
+    usesRemaining: maxUses
+      ? Math.max(0, maxUses - uses)
       : "unlimited",
   };
 };

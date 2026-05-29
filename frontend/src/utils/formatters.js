@@ -1,7 +1,7 @@
 export function formatCurrency(value) {
-  return new Intl.NumberFormat("en-IN", {
+  return new Intl.NumberFormat("en-NP", {
     style: "currency",
-    currency: "INR",
+    currency: "NPR",
     maximumFractionDigits: 2,
   }).format(value ?? 0);
 }
@@ -10,7 +10,7 @@ export function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-IN", {
+  return new Intl.DateTimeFormat("en-NP", {
     month: "short",
     day: "numeric",
     year: "numeric",

@@ -1,3 +1,4 @@
+import BillPreview from "../components/checkout/BillPreview";
 import { useEffect, useMemo, useState } from "react"
 import { motion as Motion } from "framer-motion"
 import { adminService } from "../services/admin-service"
@@ -66,6 +67,30 @@ export default function AdminDashboard() {
   const [categoryOptions, setCategoryOptions] = useState(DEFAULT_CATEGORY_OPTIONS)
   const [categoriesLoading, setCategoriesLoading] = useState(false)
   const [categoriesError, setCategoriesError] = useState("")
+  const [promos, setPromos] = useState([])
+  const [promoForm, setPromoForm] = useState({
+    code: "",
+    discountType: "percentage",
+    discountValue: "",
+    minimumOrderValue: "",
+    expiryDate: "",
+    activeStatus: true,
+  })
+  const [editingPromo, setEditingPromo] = useState(null)
+  const [promoStatus, setPromoStatus] = useState("")
+  const [popupAds, setPopupAds] = useState([])
+  const [popupForm, setPopupForm] = useState({
+    title: "",
+    textContent: "",
+    imageUrl: "",
+    targetLink: "",
+    isActive: false,
+    imageFile: null,
+    imagePreview: "",
+    imageError: "",
+  })
+  const [editingPopup, setEditingPopup] = useState(null)
+  const [popupStatus, setPopupStatus] = useState("")
 
   useEffect(() => {
     fetchDashboardData()
@@ -91,6 +116,10 @@ export default function AdminDashboard() {
       fetchCustomers()
     } else if (activeTab === "dashboard") {
       fetchDashboardData()
+    } else if (activeTab === "promos") {
+      fetchPromos()
+    } else if (activeTab === "popups") {
+      fetchPopupAds()
     }
   }, [activeTab])
 
@@ -159,7 +188,7 @@ export default function AdminDashboard() {
   // Parse stored location string of form:
   // Lat:12.345678,Lng:78.123456|Label:Home|Address:Some addr|Landmark:LM
   const parseLocationString = (s) => {
-    if (!s || typeof s !== "string") return null;
+    if (!s || typeof s !== "string") return { lat: 27.42949558266496, lng: 85.03280181607856 };
     try {
       const parts = s.split("|");
       const out = {};
@@ -181,16 +210,23 @@ export default function AdminDashboard() {
         }
       });
       // Also attempt to parse combined Lat/Lng pattern
-      if (!out.lat && s.includes("Lat:")) {
+      if ((!out.lat || !out.lng) && s.includes("Lat:")) {
         const m = s.match(/Lat:([-0-9.]+),Lng:([-0-9.]+)/);
         if (m) {
           out.lat = Number(m[1]);
           out.lng = Number(m[2]);
         }
       }
+      // Fallback to default if missing
+      if (!out.lat || !out.lng) {
+        out.lat = 27.42949558266496;
+        out.lng = 85.03280181607856;
+      }
+      // TEMP DEBUG LOG
+      console.log("[AdminDashboard] parseLocationString", out);
       return out;
     } catch {
-      return null;
+      return { lat: 27.42949558266496, lng: 85.03280181607856 };
     }
   }
 
@@ -292,6 +328,149 @@ export default function AdminDashboard() {
     setShowAddProductModal(true)
   }
 
+  const resetPromoForm = () => {
+    setEditingPromo(null)
+    setPromoForm({
+      code: "",
+      discountType: "percentage",
+      discountValue: "",
+      minimumOrderValue: "",
+      deliveryOptions: ["instant", "scheduled"],
+      expiryDate: "",
+      activeStatus: true,
+    })
+  }
+
+  const handleSubmitPromo = async (e) => {
+    e.preventDefault()
+    setPromoStatus("")
+
+    try {
+      const payload = {
+        ...promoForm,
+        discountValue: Number(promoForm.discountValue),
+        minimumOrderValue: Number(promoForm.minimumOrderValue || 0),
+      }
+      if (editingPromo) {
+        await adminService.updatePromo(editingPromo.id || editingPromo._id, payload)
+        setPromoStatus("Promo code updated")
+      } else {
+        await adminService.createPromo(payload)
+        setPromoStatus("Promo code created")
+      }
+      resetPromoForm()
+      fetchPromos()
+    } catch (error) {
+      setPromoStatus(error.response?.data?.message || "Unable to save promo code")
+    }
+  }
+
+  const handleEditPromo = (promo) => {
+    setEditingPromo(promo)
+    setPromoForm({
+      code: promo.code || "",
+      discountType: promo.discountType || "percentage",
+      discountValue: promo.discountValue ?? "",
+      minimumOrderValue: promo.minimumOrderValue ?? promo.minOrderAmount ?? "",
+      deliveryOptions: promo.deliveryOptions ?? promo.deliveryType ? (promo.deliveryType === "instant" ? ["instant"] : ["instant", "scheduled"]) : ["instant", "scheduled"],
+      expiryDate: promo.expiryDate ? new Date(promo.expiryDate).toISOString().slice(0, 10) : "",
+      activeStatus: Boolean(promo.activeStatus ?? promo.isActive),
+    })
+  }
+
+  const handleDeletePromo = async (promo) => {
+    if (!confirm(`Delete promo code ${promo.code}?`)) return
+    try {
+      await adminService.deletePromo(promo.id || promo._id)
+      setPromoStatus("Promo code deleted")
+      fetchPromos()
+    } catch (error) {
+      setPromoStatus(error.response?.data?.message || "Unable to delete promo code")
+    }
+  }
+
+  const resetPopupForm = () => {
+    if (popupForm.imagePreview) URL.revokeObjectURL(popupForm.imagePreview)
+    setEditingPopup(null)
+    setPopupForm({
+      title: "",
+      textContent: "",
+      imageUrl: "",
+      targetLink: "",
+      isActive: false,
+      imageFile: null,
+      imagePreview: "",
+      imageError: "",
+    })
+  }
+
+  const uploadPopupImage = async () => {
+    if (!popupForm.imageFile) return popupForm.imageUrl
+    const validationError = validateImageFile(popupForm.imageFile)
+    if (validationError) {
+      setPopupForm((prev) => ({ ...prev, imageError: validationError }))
+      return null
+    }
+    try {
+      const formData = new FormData()
+      formData.append("image", popupForm.imageFile)
+      const response = await storageService.uploadImage(formData)
+      return response.data?.image?.path || response.data?.image || ""
+    } catch (error) {
+      setPopupForm((prev) => ({ ...prev, imageError: getUploadErrorMessage(error) }))
+      return null
+    }
+  }
+
+  const handleSubmitPopup = async (e) => {
+    e.preventDefault()
+    setPopupStatus("")
+    const imageUrl = await uploadPopupImage()
+    if (imageUrl === null) return
+    try {
+      const payload = { ...popupForm, imageUrl }
+      delete payload.imageFile
+      delete payload.imagePreview
+      delete payload.imageError
+      if (editingPopup) {
+        await adminService.updatePopupAd(editingPopup.id || editingPopup._id, payload)
+        setPopupStatus("Popup ad updated")
+      } else {
+        await adminService.createPopupAd(payload)
+        setPopupStatus("Popup ad created")
+      }
+      resetPopupForm()
+      fetchPopupAds()
+    } catch (error) {
+      setPopupStatus(error.response?.data?.message || "Unable to save popup ad")
+    }
+  }
+
+  const handleEditPopup = (popup) => {
+    setEditingPopup(popup)
+    setPopupForm({
+      title: popup.title || "",
+      textContent: popup.textContent || "",
+      imageUrl: popup.imageUrl || "",
+      targetLink: popup.targetLink || "",
+      isActive: Boolean(popup.isActive),
+      imageFile: null,
+      imagePreview: "",
+      imageError: "",
+    })
+  }
+
+  const handleDeletePopup = async (popup) => {
+    if (!confirm("Delete this popup ad?")) return
+    try {
+      await adminService.deletePopupAd(popup.id || popup._id)
+      setPopupStatus("Popup ad deleted")
+      fetchPopupAds()
+    } catch (error) {
+      setPopupStatus(error.response?.data?.message || "Unable to delete popup ad")
+    }
+  }
+
   const handleUpdateOrderStatus = async (id, status) => {
     try {
       await orderService.update(id, { status })
@@ -317,6 +496,34 @@ export default function AdminDashboard() {
   const resetProductForm = () => {
     if (productForm.imagePreview) URL.revokeObjectURL(productForm.imagePreview)
     setProductForm(PRODUCT_FORM_INITIAL)
+  }
+
+  const fetchPromos = async () => {
+    try {
+      setLoading(true)
+      setPromoStatus("")
+      const response = await adminService.getPromos()
+      setPromos(normalizeResponseArray(response.data, ["promos", "data"]))
+    } catch (error) {
+      setPromos([])
+      setPromoStatus(error.response?.status === 404 ? "Promo routes are unavailable." : "Unable to load promo codes.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchPopupAds = async () => {
+    try {
+      setLoading(true)
+      setPopupStatus("")
+      const response = await adminService.getPopupAds()
+      setPopupAds(normalizeResponseArray(response.data, ["popups", "data"]))
+    } catch (error) {
+      setPopupAds([])
+      setPopupStatus(error.response?.status === 404 ? "Popup ad routes are unavailable." : "Unable to load popup ads.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   const uploadProductImage = async () => {
@@ -373,7 +580,8 @@ export default function AdminDashboard() {
   const filteredCustomers = useMemo(() => {
     const search = customerSearch.trim().toLowerCase()
     return customers.filter((customer) => {
-      const label = `${customer.full_name || customer.name || ""} ${customer.Phone} ${customer.email || ""} ${customer.role || ""}`.toLowerCase()
+      const phone = customer.phone || customer.phoneno || customer.Phone || ""
+      const label = `${customer.full_name || customer.name || ""} ${phone} ${customer.email || ""} ${customer.role || ""}`.toLowerCase()
       return !search || label.includes(search)
     })
   }, [customers, customerSearch])
@@ -592,6 +800,36 @@ export default function AdminDashboard() {
           <CustomersView customers={filteredCustomers} loading={loading} searchTerm={customerSearch} onSearch={setCustomerSearch} />
         )}
 
+        {activeTab === "promos" && (
+          <PromoCodesView
+            promos={promos}
+            form={promoForm}
+            setForm={setPromoForm}
+            editing={editingPromo}
+            status={promoStatus}
+            loading={loading}
+            onSubmit={handleSubmitPromo}
+            onCancel={resetPromoForm}
+            onEdit={handleEditPromo}
+            onDelete={handleDeletePromo}
+          />
+        )}
+
+        {activeTab === "popups" && (
+          <PopupAdsView
+            popups={popupAds}
+            form={popupForm}
+            setForm={setPopupForm}
+            editing={editingPopup}
+            status={popupStatus}
+            loading={loading}
+            onSubmit={handleSubmitPopup}
+            onCancel={resetPopupForm}
+            onEdit={handleEditPopup}
+            onDelete={handleDeletePopup}
+          />
+        )}
+
         {activeTab === "settings" && (
           <div className="max-w-full rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
             <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">Settings</h2>
@@ -793,13 +1031,17 @@ function OrdersView({
   onSearch,
   parseLocationString,
 }) {
-  const SHOP_LAT = Number(
-  import.meta.env.VITE_SHOP_LAT || 27.429280726769314
-);
+  // Bill preview modal state
+  const [showBillPreview, setShowBillPreview] = useState(false);
+  const [selectedBill, setSelectedBill] = useState(null);
 
-const SHOP_LNG = Number(
-  import.meta.env.VITE_SHOP_LNG || 85.03281182486674
-);
+  const SHOP_LAT = Number(
+    import.meta.env.VITE_SHOP_LAT || 27.429280726769314
+  );
+
+  const SHOP_LNG = Number(
+    import.meta.env.VITE_SHOP_LNG || 85.03281182486674
+  );
 
   const haversine = (lat1, lon1, lat2, lon2) => {
     if ([lat1, lon1, lat2, lon2].some((v) => v === undefined || v === null)) return Infinity;
@@ -840,186 +1082,171 @@ const SHOP_LNG = Number(
       route.push(picked.order);
       curLat = picked.loc.lat; curLng = picked.loc.lng;
     }
-
-    // combine route then other non-pending in original order
     return [...route, ...others];
   };
+
   return (
-    <Motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="min-w-0 max-w-full"
-    >
-      <div className="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
-            Orders
-          </h1>
-
-          <p className="mt-1 text-slate-500">
-            Review order details and update fulfillment status.
-          </p>
+    <>
+      {/* Bill Preview Modal */}
+      {showBillPreview && selectedBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="relative bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl">
+            <button
+              className="absolute top-2 right-2 text-xl text-slate-500 hover:text-slate-900"
+              onClick={() => setShowBillPreview(false)}
+              aria-label="Close"
+              type="button"
+            >
+              ×
+            </button>
+            <BillPreview
+              cartItems={selectedBill.items ?? []}
+              subtotal={selectedBill.subtotal ?? 0}
+              deliveryFee={selectedBill.deliveryFee ?? 0}
+              codFee={selectedBill.codFee ?? 0}
+              promoDiscount={selectedBill.promoDiscount ?? 0}
+              totalAmount={selectedBill.totalAmount ?? 0}
+              customerName={selectedBill.customerName ?? selectedBill.customer_name ?? "—"}
+              customerPhone={selectedBill.customerPhone ?? selectedBill.phone_number ?? "—"}
+              deliveryAddress={selectedBill.deliveryAddress ?? "—"}
+              landmark={selectedBill.landmark ?? ""}
+              deliveryType={selectedBill.deliveryType ?? selectedBill.delivery_type ?? ""}
+              paymentMode={selectedBill.paymentMode ?? selectedBill.payment_mode ?? ""}
+              promoCode={selectedBill.promoCode ?? ""}
+              createdAt={selectedBill.createdAt ?? selectedBill.created_at}
+            />
+          </div>
         </div>
+      )}
+      <Motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 max-w-full">
+            <div className="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Orders</h1>
+                <p className="mt-1 text-slate-500">Review order details and update fulfillment status.</p>
+              </div>
+              <div className="flex w-full min-w-0 flex-col gap-3 xl:w-auto xl:flex-row xl:items-center">
+                <Input
+                  label="Search orders"
+                  id="order-search"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(e) => onSearch(e.target.value)}
+                  placeholder="Search order ID, customer, phone no or status"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const planned = planRoute();
+                    const ev = new CustomEvent("admin:routePlanned", { detail: planned });
+                    window.dispatchEvent(ev);
+                  }}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 sm:w-auto sm:min-w-[180px] sm:whitespace-nowrap"
+                >
+                  Plan Delivery Route
+                </button>
+              </div>
+            </div>
 
-        <div className="flex w-full min-w-0 flex-col gap-3 xl:w-auto xl:flex-row xl:items-center">
-          <Input
-            label="Search orders"
-            id="order-search"
-            type="search"
-            value={searchTerm}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search order ID, customer, phone no or status"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const planned = planRoute();
-              // mutate displayed order list by replacing array in-place via window event
-              // find global setter via custom event so parent can refresh
-              const ev = new CustomEvent("admin:routePlanned", { detail: planned });
-              window.dispatchEvent(ev);
-            }}
-            className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 sm:w-auto sm:min-w-[180px] sm:whitespace-nowrap"
-          >
-            Plan Delivery Route
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-slate-500 shadow-sm sm:p-10">
-          Loading orders...
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm sm:p-12">
-          <p className="text-lg font-semibold text-slate-900">
-            No orders yet
-          </p>
-
-          <p className="mt-2 text-slate-500">
-            Orders will populate here as customers check out.
-          </p>
-        </div>
-      ) : (
-        <div className="max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="w-full overflow-x-auto">
-            <table className="min-w-[1040px] table-fixed text-left text-xs text-slate-600">
-              <thead className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 text-[10px] uppercase tracking-[0.12em] text-slate-700 border-b-2 border-emerald-200 font-bold">
-                <tr>
-                  <th className="px-3 py-3">Order</th>
-                  <th className="px-3 py-3">Customer</th>
-                  <th className="px-3 py-3">Phone</th>
-                  <th className="px-3 py-3">Amount</th>
-                  <th className="px-3 py-3">
-                    Order Status
-                  </th>
-                  <th className="px-3 py-3">
-                    Payment Status
-                  </th>
-                  <th className="px-3 py-3">Placed</th>
-                  <th className="px-3 py-3">Location</th>
-                  <th className="px-3 py-3">
-                    Update Status
-                  </th>
-                  <th className="px-3 py-3">
-                    Update Payment
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {orders.map((order, idx) => {
-                  const loc = parseLocationString(order.deliveryAddress || order.deliveryAddress_raw || "") || {}
-                  const shortAddress = loc.address?.split(",").slice(0, 2).join(", ") || "No address"
-                  return (
-                  <tr
-                    key={order.id || order._id}
-                    className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
-                  >
-                    <td className="px-3 py-3 max-w-[120px] truncate whitespace-nowrap">
-                      <div className="font-semibold text-slate-900 truncate max-w-[120px]">
-                        #
-                        {order.orderNumber ||
-                          (order.id || order._id)?.slice(-8)}
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-3 max-w-[120px] truncate">
-                      <div className="flex flex-col">
-                        <span className="max-w-[120px] truncate font-medium text-slate-900">
-                          {order.customerName ||
-                            order.customer_name ||
-                            "Guest"}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-3 whitespace-nowrap text-slate-600">
-                      {order.customerPhone ||
-                        order.phone_number ||
-                        "—"}
-                    </td>
-
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <span className="font-semibold text-emerald-600">
-                        {formatCurrency(
-                          order.totalAmount ??
-                            order.total_amount ??
-                            0
-                        )}
-                      </span>
-                    </td>
-
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <Badge
-                        label={getStatusLabel(order.status)}
-                        variant={order.status}
-                        className="px-2 py-0.5 text-[11px]"
-                      />
-                    </td>
-
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <Badge
-                        label={getPaymentLabel(order.paymentStatus || order.payment || "pending")}
-                        variant={order.paymentStatus || order.payment || "pending"}
-                        className="px-2 py-0.5 text-[11px]"
-                      />
-                    </td>
-
-                    <td className="px-3 py-3 whitespace-nowrap text-slate-500 text-xs">
-                      {formatDate(
-                        order.createdAt ?? order.created_at
-                      )}
-                    </td>
-
-                    <td className="px-3 py-3 max-w-[180px]">
-                      {loc?.lat ? (
-                        <div className="space-y-1 text-xs leading-tight">
-                          <p className="font-medium text-slate-800 truncate">
-                            {shortAddress}
-                          </p>
-
-                          {loc.landmark && (
-                            <p className="truncate text-slate-500">
-                              {loc.landmark}
-                            </p>
-                          )}
-
-                          <a
-                            href={`https://www.google.com/maps?q=${loc.lat},${loc.lng}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex text-emerald-600 hover:underline"
-                          >
-                            Maps
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400">
-                          No location
-                        </span>
-                      )}
-                    </td>
+            {loading ? (
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-center text-slate-500 shadow-sm sm:p-10">Loading orders...</div>
+            ) : orders.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-6 text-center shadow-sm sm:p-12">
+                <p className="text-lg font-semibold text-slate-900">No orders yet</p>
+                <p className="mt-2 text-slate-500">Orders will populate here as customers check out.</p>
+              </div>
+            ) : (
+              <div className="max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="w-full overflow-x-auto">
+                  <table className="min-w-[1040px] table-fixed text-left text-xs text-slate-600">
+                    <thead className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 text-[10px] uppercase tracking-[0.12em] text-slate-700 border-b-2 border-emerald-200 font-bold">
+                      <tr>
+                        <th className="px-3 py-3">Order</th>
+                        <th className="px-3 py-3">Customer</th>
+                        <th className="px-3 py-3">Phone</th>
+                        <th className="px-3 py-3">Amount</th>
+                        <th className="px-3 py-3">Order Status</th>
+                        <th className="px-3 py-3">Payment Status</th>
+                        <th className="px-3 py-3">Placed</th>
+                        <th className="px-3 py-3">Location</th>
+                        <th className="px-3 py-3">Update Status</th>
+                        <th className="px-3 py-3">Update Payment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map((order, idx) => {
+                        const loc = order.location || parseLocationString(order.deliveryAddress || order.deliveryAddress_raw || "") || {};
+                        const latitude = Number(loc?.lat ?? loc?.latitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[1] : undefined));
+                        const longitude = Number(loc?.lng ?? loc?.longitude ?? (Array.isArray(loc?.coordinates) ? loc.coordinates[0] : undefined));
+                        const hasValidCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+                        const shortAddress = loc.address?.split(",").slice(0, 2).join(", ") || "No address";
+                        let mapsHref = "";
+                        if (hasValidCoordinates) {
+                          mapsHref = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+                        }
+                        return (
+                          <tr key={order.id || order._id} className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                            <td className="px-3 py-3 max-w-[120px] truncate whitespace-nowrap">
+                              <div className="font-semibold text-slate-900 truncate max-w-[120px]">
+                                #{order.orderNumber || (order.id || order._id)?.slice(-8)}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 max-w-[120px] truncate">
+                              <div className="flex flex-col">
+                                <span className="max-w-[120px] truncate font-medium text-slate-900">{order.customerName || order.customer_name || "Guest"}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap text-slate-600">{order.customerPhone || order.phone_number || "—"}</td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <span className="font-semibold text-emerald-600">{formatCurrency(order.totalAmount ?? order.total_amount ?? 0)}</span>
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <Badge label={getStatusLabel(order.status)} variant={order.status} className="px-2 py-0.5 text-[11px]" />
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <Badge label={getPaymentLabel(order.paymentStatus || order.payment || "pending")} variant={order.paymentStatus || order.payment || "pending"} className="px-2 py-0.5 text-[11px]" />
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap text-slate-500 text-xs">
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-50 hover:text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                title={formatDate(order.createdAt ?? order.created_at)}
+                                onClick={() => {
+                                  setSelectedBill(order);
+                                  setShowBillPreview(true);
+                                }}
+                              >
+                                🧾 Bill Preview
+                              </button>
+                              <div className="mt-1 text-[10px] text-slate-400">{formatDate(order.createdAt ?? order.created_at)}</div>
+                            </td>
+                            <td className="px-3 py-3 max-w-[180px]">
+  {hasValidCoordinates ? (
+    <div className="space-y-1 text-xs leading-tight">
+      <p className="font-medium text-slate-800 truncate">{shortAddress}</p>
+      <p className="text-[11px] text-slate-400">
+        {latitude.toFixed(6)}, {longitude.toFixed(6)}
+      </p>
+      {loc.landmark && (
+        <p className="truncate text-slate-500">
+          {loc.landmark}
+        </p>
+      )}
+      <a
+        href={`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex text-emerald-600 hover:underline font-semibold"
+        title={`Open exact location in Google Maps (${latitude}, ${longitude})`}
+      >
+        📍 Open in Maps
+      </a>
+    </div>
+  ) : (
+    <span className="text-xs text-slate-400">
+      No location
+    </span>
+  )}
+</td>
 
                     <td className="px-3 py-3 min-w-[140px]">
                       <select
@@ -1056,6 +1283,7 @@ const SHOP_LNG = Number(
         </div>
       )}
     </Motion.div>
+    </>
   )
 }
 
@@ -1089,30 +1317,236 @@ function CustomersView({ customers, loading, searchTerm, onSearch }) {
       ) : (
         <div className="max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="min-w-[680px] text-left text-sm text-slate-600">
+            <table className="min-w-[960px] text-left text-sm text-slate-600">
               <thead className="bg-gradient-to-r from-emerald-50 to-teal-50 text-slate-700 uppercase tracking-[0.15em] text-xs font-bold border-b-2 border-emerald-200">
                 <tr>
                   <th className="py-4 px-4">Customer</th>
                   <th className="py-4 px-4">Email</th>
                   <th className="py-4 px-4">Phone</th>
+                  <th className="py-4 px-4">Total Spent</th>
+                  <th className="py-4 px-4">Recent Order</th>
                   <th className="py-4 px-4">Joined</th>
                 </tr>
               </thead>
               <tbody>
-                {customers.map((customer, idx) => (
-                  <tr key={customer.id || customer._id} className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                    <td className="py-4 px-4 font-medium text-slate-900"><span className="block max-w-[180px] truncate">{customer.full_name || customer.name || "Customer"}</span></td>
-                    <td className="py-4 px-4"><span className="block max-w-[220px] truncate">{customer.email}</span></td>
-                    <td className="py-4 px-4 whitespace-nowrap">{customer.phone}</td>
-                    {/* <td className="py-4 px-4"><Badge label={customer.role || "customer"} variant={customer.role || "customer"} /></td> */}
-                    <td className="py-4 px-4 text-slate-500">{formatDate(customer.created_at)}</td>
-                  </tr>
-                ))}
+                {customers.map((customer, idx) => {
+                  const phone = customer.phone || customer.phoneno || "-"
+                  const recentOrder = customer.recentOrder
+                  return (
+                    <tr key={customer.id || customer._id} className={`border-b border-slate-100 transition-all hover:bg-emerald-50 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                      <td className="py-4 px-4 font-medium text-slate-900"><span className="block max-w-[180px] truncate">{customer.full_name || customer.name || "Customer"}</span></td>
+                      <td className="py-4 px-4"><span className="block max-w-[220px] truncate">{customer.email || "-"}</span></td>
+                      <td className="py-4 px-4 whitespace-nowrap">{phone}</td>
+                      <td className="py-4 px-4 whitespace-nowrap font-semibold text-emerald-600">{formatCurrency(customer.totalSpent ?? 0)}</td>
+                      <td className="py-4 px-4">
+                        {recentOrder ? (
+                          <span className="block max-w-[220px] truncate">
+                            {recentOrder.orderNumber || "Order"} · {formatCurrency(recentOrder.totalAmount ?? 0)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">No orders yet</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-slate-500">{formatDate(customer.created_at || customer.createdAt)}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
+    </Motion.div>
+  )
+}
+
+function PromoCodesView({ promos, form, setForm, editing, status, loading, onSubmit, onCancel, onEdit, onDelete }) {
+  return (
+    <Motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 max-w-full">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Promo Codes</h1>
+        <p className="mt-1 text-slate-500">Create and manage customer discounts.</p>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <form onSubmit={onSubmit} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-900">{editing ? "Edit promo" : "Add promo"}</h2>
+          <div className="mt-5 grid gap-4">
+            <Input label="Code" id="promo-code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} placeholder="SAVE10" />
+            <label className="block text-sm font-medium text-slate-700">
+              Discount type
+              <select value={form.discountType} onChange={(e) => setForm({ ...form, discountType: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-emerald-500 focus:outline-none">
+                <option value="percentage">Percentage</option>
+                <option value="fixed">Fixed</option>
+              </select>
+            </label>
+           <div className="flex flex-col gap-2">
+  <label htmlFor="promo-delivery-options" className="text-sm font-medium text-slate-700">
+    Delivery Options
+  </label>
+  <select
+    id="promo-delivery-options"
+    value={
+      form.deliveryOptions &&
+      form.deliveryOptions.includes("instant") &&
+      form.deliveryOptions.includes("scheduled")
+        ? "both"
+        : form.deliveryOptions?.[0] || "both"
+    }
+    onChange={(e) => {
+      const val = e.target.value;
+      setForm({
+        ...form,
+        deliveryOptions: val === "both" ? ["instant", "scheduled"] : [val],
+      });
+    }}
+    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-green-500 focus:outline-none"
+  >
+    <option value="both">Both (Instant & Scheduled)</option>
+    <option value="instant">Instant Only</option>
+    <option value="scheduled">Scheduled Only</option>
+  </select>
+</div>
+            <Input label="Discount value" id="promo-discount" type="number" min="0" step="0.01" value={form.discountValue} onChange={(e) => setForm({ ...form, discountValue: e.target.value })} />
+            <Input label="Minimum order value" id="promo-minimum" type="number" min="0" step="0.01" value={form.minimumOrderValue} onChange={(e) => setForm({ ...form, minimumOrderValue: e.target.value })} />
+            <Input label="Expiry date" id="promo-expiry" type="date" value={form.expiryDate} onChange={(e) => setForm({ ...form, expiryDate: e.target.value })} />
+            <label className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={form.activeStatus} onChange={(e) => setForm({ ...form, activeStatus: e.target.checked })} className="h-4 w-4" />
+              Active
+            </label>
+          </div>
+          {status && <p className="mt-4 text-sm font-medium text-emerald-700">{status}</p>}
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <Button type="submit" className="w-full sm:w-auto">{editing ? "Update promo" : "Create promo"}</Button>
+            {editing && <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">Cancel</Button>}
+          </div>
+        </form>
+
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          {loading ? (
+            <div className="p-10 text-center text-slate-500">Loading promo codes...</div>
+          ) : promos.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">No promo codes yet</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-xs uppercase tracking-[0.15em] text-slate-500">
+                  <tr>
+                    <th className="px-4 py-4">Code</th>
+                    <th className="px-4 py-4">Discount</th>
+                    <th className="px-4 py-4">Minimum</th>
+                    <th className="px-4 py-4">Expiry</th>
+                    <th className="px-4 py-4">Status</th>
+                    <th className="px-4 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promos.map((promo) => (
+                    <tr key={promo.id || promo._id} className="border-t border-slate-100">
+                      <td className="px-4 py-4 font-semibold text-slate-900">{promo.code}</td>
+                      <td className="px-4 py-4">{promo.discountType === "percentage" ? `${promo.discountValue}%` : formatCurrency(promo.discountValue)}</td>
+                      <td className="px-4 py-4">{formatCurrency(promo.minimumOrderValue ?? promo.minOrderAmount ?? 0)}</td>
+                      <td className="px-4 py-4">{promo.expiryDate ? formatDate(promo.expiryDate) : "No expiry"}</td>
+                      <td className="px-4 py-4">{promo.activeStatus ? "Active" : "Inactive"}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => onEdit(promo)}>Edit</Button>
+                          <Button size="sm" variant="ghost" onClick={() => onDelete(promo)}>Delete</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Motion.div>
+  )
+}
+
+function PopupAdsView({ popups, form, setForm, editing, status, loading, onSubmit, onCancel, onEdit, onDelete }) {
+  const previewSrc = form.imagePreview || resolveAssetUrl(form.imageUrl)
+  const handleImageFileChange = (e) => {
+    const file = e.target.files[0]
+    if (form.imagePreview) URL.revokeObjectURL(form.imagePreview)
+    if (!file) {
+      setForm({ ...form, imageFile: null, imagePreview: "", imageError: "" })
+      return
+    }
+    const imageError = validateImageFile(file)
+    setForm({
+      ...form,
+      imageFile: imageError ? null : file,
+      imagePreview: imageError ? "" : URL.createObjectURL(file),
+      imageError,
+    })
+  }
+
+  return (
+    <Motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 max-w-full">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Popup Ads</h1>
+        <p className="mt-1 text-slate-500">Manage the lightweight marketing popup shown to shoppers.</p>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <form onSubmit={onSubmit} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-slate-900">{editing ? "Edit popup" : "Add popup"}</h2>
+          <div className="mt-5 grid gap-4">
+            <Input label="Title" id="popup-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <label className="block text-sm font-medium text-slate-700">
+              Text content
+              <textarea value={form.textContent} onChange={(e) => setForm({ ...form, textContent: e.target.value })} rows={4} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus:border-emerald-500 focus:outline-none" />
+            </label>
+            <Input label="Image URL" id="popup-image-url" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+            <label className="block text-sm font-medium text-slate-700">
+              Popup image
+              <input type="file" accept="image/*" onChange={handleImageFileChange} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" />
+              {form.imageError && <p className="mt-2 text-sm text-rose-600">{form.imageError}</p>}
+            </label>
+            <Input label="Target link" id="popup-link" value={form.targetLink} onChange={(e) => setForm({ ...form, targetLink: e.target.value })} placeholder="https://example.com" />
+            <label className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="h-4 w-4" />
+              Show popup
+            </label>
+          </div>
+          {previewSrc && <img src={previewSrc} alt="Popup preview" className="mt-5 max-h-56 w-full rounded-2xl object-cover" />}
+          {status && <p className="mt-4 text-sm font-medium text-emerald-700">{status}</p>}
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <Button type="submit" className="w-full sm:w-auto">{editing ? "Update popup" : "Create popup"}</Button>
+            {editing && <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-auto">Cancel</Button>}
+          </div>
+        </form>
+
+        <div className="grid content-start gap-4">
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">Loading popup ads...</div>
+          ) : popups.length === 0 ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">No popup ads yet</div>
+          ) : (
+            popups.map((popup) => (
+              <div key={popup.id || popup._id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row">
+                  {popup.imageUrl && <img src={resolveAssetUrl(popup.imageUrl)} alt={popup.title || "Popup"} className="h-28 w-full rounded-2xl object-cover sm:w-40" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-semibold text-slate-900">{popup.title || "Untitled popup"}</h3>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${popup.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{popup.isActive ? "On" : "Off"}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-500">{popup.textContent || "Image only popup"}</p>
+                    {popup.targetLink && <p className="mt-2 truncate text-xs text-slate-400">{popup.targetLink}</p>}
+                    <div className="mt-4 flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => onEdit(popup)}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => onDelete(popup)}>Delete</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </Motion.div>
   )
 }

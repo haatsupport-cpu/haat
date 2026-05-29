@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  useMapEvents,
+  useMap,
+} from "react-leaflet";
 import L from "leaflet";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -7,22 +13,27 @@ import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 import { locationService } from "../../services/location-service";
 
-const DEFAULT_CENTER = { lat: 27.4287, lng: 85.0322 }; // Hetauda, Nepal
+const DEFAULT_CENTER = {
+  lat: 27.42949558266496,
+  lng: 85.03280181607856,
+};
 
 delete L.Icon.Default.prototype._getIconUrl;
+
 L.Icon.Default.mergeOptions({
   iconRetinaUrl,
   iconUrl,
   shadowUrl,
 });
 
-// Simple debounce
-function useDebounce(value, delay) {
+function useDebounce(value, delay = 600) {
   const [debounced, setDebounced] = useState(value);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(t);
   }, [value, delay]);
+
   return debounced;
 }
 
@@ -31,13 +42,12 @@ function DraggableMarker({ position, onDragEnd, onMapClick }) {
 
   useMapEvents({
     click(e) {
-      onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+      onMapClick({
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+      });
     },
   });
-
-  useEffect(() => {
-    if (markerRef.current) markerRef.current.setLatLng(position);
-  }, [position]);
 
   return (
     <Marker
@@ -47,34 +57,75 @@ function DraggableMarker({ position, onDragEnd, onMapClick }) {
       eventHandlers={{
         dragend() {
           const latlng = markerRef.current.getLatLng();
-          onDragEnd({ lat: latlng.lat, lng: latlng.lng });
+
+          onDragEnd({
+            lat: latlng.lat,
+            lng: latlng.lng,
+          });
         },
       }}
     />
   );
 }
 
-export default function Deliverylocation({ formData, setFormData }) {
-  const [pos, setPos] = useState({ 
-    lat: formData.lat ?? DEFAULT_CENTER.lat, 
-    lng: formData.lng ?? DEFAULT_CENTER.lng 
-  });
-  const [search, setSearch] = useState("");
-  const debounced = useDebounce(search, 600);
-  const [results, setResults] = useState([]);
-  const [rateLimited, setRateLimited] = useState(false);
-  const mapRef = useRef(null);
-
-  // simple frontend rate-limit: 1 req / sec
-  const lastCallRef = useRef(0);
+function RecenterMap({ lat, lng }) {
+  const map = useMap();
 
   useEffect(() => {
-    if (!debounced) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    map.invalidateSize();
+    map.flyTo([lat, lng], 17, {
+      duration: 0.8,
+    });
+  }, [lat, lng, map]);
+
+  return null;
+}
+
+export default function Deliverylocation({ formData, setFormData }) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [rateLimited, setRateLimited] = useState(false);
+
+  const debounced = useDebounce(search);
+  const mapRef = useRef(null);
+  const lastCallRef = useRef(0);
+
+  const latitude =
+    Number.isFinite(Number(formData?.lat)) &&
+    Math.abs(Number(formData.lat)) > 1
+      ? Number(formData.lat)
+      : DEFAULT_CENTER.lat;
+
+  const longitude =
+    Number.isFinite(Number(formData?.lng)) &&
+    Math.abs(Number(formData.lng)) > 1
+      ? Number(formData.lng)
+      : DEFAULT_CENTER.lng;
+
+  const updateLocation = ({ lat, lng, address = "" }) => {
+    const parsedLat = Number(lat);
+    const parsedLng = Number(lng);
+
+    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      lat: parsedLat,
+      lng: parsedLng,
+      deliveryAddress: address || prev.deliveryAddress || "",
+    }));
+  };
+
+  useEffect(() => {
+    if (!debounced?.trim()) {
       setResults([]);
       return;
     }
 
     const now = Date.now();
+
     if (now - lastCallRef.current < 900) {
       setRateLimited(true);
       return;
@@ -85,145 +136,160 @@ export default function Deliverylocation({ formData, setFormData }) {
 
     locationService
       .search(debounced)
-      .then((data) => setResults(Array.isArray(data) ? data : []))
+      .then((data) => {
+        setResults(Array.isArray(data) ? data : []);
+      })
       .catch(() => setResults([]));
   }, [debounced]);
 
   const reverseGeocode = async (lat, lng) => {
     try {
       const data = await locationService.reverseGeocode(lat, lng);
-      const display = data.display_name || "";
-      setFormData((prev) => ({
-        ...prev,
-        lat: Number(lat.toFixed(6)),
-        lng: Number(lng.toFixed(6)),
-        deliveryAddress: display,
-      }));
+
+      updateLocation({
+        lat,
+        lng,
+        address: data?.display_name || "",
+      });
     } catch {
-      setFormData((prev) => ({
-        ...prev,
-        lat: Number(lat.toFixed(6)),
-        lng: Number(lng.toFixed(6)),
-      }));
+      updateLocation({ lat, lng });
     }
+  };
+
+  const handleMapClick = ({ lat, lng }) => {
+    updateLocation({ lat, lng });
+    reverseGeocode(lat, lng);
+  };
+
+  const handleMarkerDrag = ({ lat, lng }) => {
+    updateLocation({ lat, lng });
+    reverseGeocode(lat, lng);
   };
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return;
+
     navigator.geolocation.getCurrentPosition(
-      (p) => {
-        const lat = Number(p.coords.latitude.toFixed(6));
-        const lng = Number(p.coords.longitude.toFixed(6));
-        setPos({ lat, lng });
+      ({ coords }) => {
+        const lat = coords.latitude;
+        const lng = coords.longitude;
+
+        updateLocation({ lat, lng });
+
         if (mapRef.current) {
-          mapRef.current.flyTo([lat, lng], 17, { duration: 0.8 });
+          mapRef.current.setView([lat, lng], 17);
         }
+
         reverseGeocode(lat, lng);
       },
-      () => {},
-      { enableHighAccuracy: true }
+      console.error,
+      {
+        enableHighAccuracy: true,
+      }
     );
   };
 
   const handleSelectResult = (r) => {
-    const lat = Number(parseFloat(r.lat).toFixed(6));
-    const lng = Number(parseFloat(r.lon).toFixed(6));
-    setPos({ lat, lng });
-    if (mapRef.current) {
-      mapRef.current.flyTo([lat, lng], 17, { duration: 0.8 });
-    }
-    setResults([]);
-    setSearch("");
-    setFormData((prev) => ({
-      ...prev,
+    const lat = parseFloat(r.lat);
+    const lng = parseFloat(r.lon);
+
+    updateLocation({
       lat,
       lng,
-      deliveryAddress: r.display_name || r.address || "",
-    }));
-  };
+      address: r.display_name,
+    });
 
-  const handleMarkerDrag = ({ lat, lng }) => {
-    const l = Number(lat.toFixed(6));
-    const ln = Number(lng.toFixed(6));
-    setPos({ lat: l, lng: ln });
-    reverseGeocode(l, ln);
-  };
-
-  const handleMapClick = ({ lat, lng }) => {
-    const l = Number(lat.toFixed(6));
-    const ln = Number(lng.toFixed(6));
-    setPos({ lat: l, lng: ln });
     if (mapRef.current) {
-      mapRef.current.flyTo([l, ln], 17, { duration: 0.8 });
+      mapRef.current.setView([lat, lng], 17);
     }
-    reverseGeocode(l, ln);
-  };
 
-  useEffect(() => {
-    if (formData.lat && formData.lng) setPos({ lat: formData.lat, lng: formData.lng });
-  }, [formData.lat, formData.lng]);
+    setResults([]);
+    setSearch("");
+  };
 
   return (
     <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Delivery Location</h3>
-        <button type="button" onClick={useCurrentLocation} className="text-sm text-green-600">Use Current Location</button>
+        <h3 className="text-lg font-semibold text-slate-900">
+          Delivery Location
+        </h3>
+
+        <button
+          type="button"
+          onClick={useCurrentLocation}
+          className="text-sm font-semibold text-green-600 hover:text-green-700"
+        >
+          Use Current Location
+        </button>
       </div>
 
-      <div>
+      <div className="relative">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search address"
-          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900"
+          placeholder="Search address..."
+          className="w-full rounded-2xl border border-slate-300 px-4 py-3"
         />
-        {rateLimited && <div className="text-xs text-rose-500 mt-1">Too many searches — slow down</div>}
+
+        {rateLimited && (
+          <div className="mt-1 text-xs text-red-500">
+            Too many searches — slow down
+          </div>
+        )}
+
         {results.length > 0 && (
-          <ul className="mt-2 max-h-48 overflow-auto rounded-xl border border-slate-100 bg-white shadow-sm">
+          <ul className="absolute z-[1000] mt-2 max-h-48 w-full overflow-auto rounded-xl border bg-white shadow-lg">
             {results.map((r) => (
-              <li key={r.place_id} onClick={() => handleSelectResult(r)} className="cursor-pointer px-3 py-2 text-sm hover:bg-emerald-50">{r.display_name}</li>
+              <li
+                key={r.place_id}
+                onClick={() => handleSelectResult(r)}
+                className="cursor-pointer px-4 py-3 hover:bg-emerald-50"
+              >
+                {r.display_name}
+              </li>
             ))}
           </ul>
         )}
       </div>
 
-      <div className="relative h-64 rounded-2xl overflow-hidden border border-slate-200">
-        <style>{`.leaflet-container { cursor: crosshair; }`}</style>
-        <MapContainer 
+      <div className="relative h-64 min-h-[250px] overflow-hidden rounded-2xl border">
+        <MapContainer
+          center={[latitude, longitude]}
+          zoom={17}
           ref={mapRef}
-          center={[pos.lat || DEFAULT_CENTER.lat, pos.lng || DEFAULT_CENTER.lng]} 
-          zoom={14} 
-          style={{ height: "100%" }}
+          style={{
+            height: "100%",
+            width: "100%",
+          }}
         >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <DraggableMarker 
-            position={[pos.lat || DEFAULT_CENTER.lat, pos.lng || DEFAULT_CENTER.lng]} 
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          <DraggableMarker
+            position={[latitude, longitude]}
             onDragEnd={handleMarkerDrag}
             onMapClick={handleMapClick}
           />
+
+          <RecenterMap lat={latitude} lng={longitude} />
         </MapContainer>
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-[999] -translate-x-1/2 -translate-y-1/2">
-          <div className="h-4 w-4 rounded-full border-2 border-white bg-emerald-600 shadow-lg" />
-        </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Label</label>
-        <select value={formData.label || "Home"} onChange={(e) => setFormData((p) => ({ ...p, label: e.target.value }))} className="w-full rounded-2xl border border-slate-300 px-4 py-3">
-          <option>Home</option>
-          <option>Office</option>
-          <option>Other</option>
-        </select>
-      </div>
+      <input
+        value={formData.landmark || ""}
+        onChange={(e) =>
+          setFormData((prev) => ({
+            ...prev,
+            landmark: e.target.value,
+          }))
+        }
+        placeholder="Landmark"
+        className="w-full rounded-2xl border px-4 py-3"
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Landmark</label>
-        <input value={formData.landmark || ""} onChange={(e) => setFormData((p) => ({ ...p, landmark: e.target.value }))} className="w-full rounded-2xl border border-slate-300 px-4 py-3" />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Selected Address</label>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">{formData.deliveryAddress || "—"}</div>
+      <div className="rounded-2xl border bg-slate-50 px-4 py-3 text-sm">
+        {formData.deliveryAddress || "Pin a location on the map"}
       </div>
     </div>
   );

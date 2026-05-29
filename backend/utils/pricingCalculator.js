@@ -6,17 +6,46 @@ const DELIVERY_CONFIG = {
     name: "instant",
     baseFee: 50, // Rs. 50
     nightSurcharge: 150, // Rs. 150 from 10 PM to 3 AM
-    minOrderAmount: 0,
+    minOrderAmount: 500,
   },
   SCHEDULED: {
     name: "scheduled",
     baseFee: 40, // Rs. 40
     nightSurcharge: 40, // No additional surcharge
-    minOrderAmount: 0,
+    minOrderAmount: 300,
   },
   COD_FEE: 10, // Rs. 10 for Cash on Delivery
   NIGHT_START_HOUR: 22, // 10 PM
   NIGHT_END_HOUR: 3, // 3 AM
+};
+
+export const normalizeDeliveryType = (deliveryType) => {
+  const normalized = String(deliveryType || "").trim().toLowerCase();
+  return normalized === DELIVERY_CONFIG.SCHEDULED.name
+    ? DELIVERY_CONFIG.SCHEDULED.name
+    : DELIVERY_CONFIG.INSTANT.name;
+};
+
+export const validateDeliveryMinimum = (deliveryType, subtotal) => {
+  const normalizedType = normalizeDeliveryType(deliveryType);
+  const safeSubtotal = Number(subtotal);
+  const minimum =
+    normalizedType === DELIVERY_CONFIG.SCHEDULED.name
+      ? DELIVERY_CONFIG.SCHEDULED.minOrderAmount
+      : DELIVERY_CONFIG.INSTANT.minOrderAmount;
+
+  if (!Number.isFinite(safeSubtotal) || safeSubtotal < minimum) {
+    return {
+      valid: false,
+      error:
+        normalizedType === DELIVERY_CONFIG.SCHEDULED.name
+          ? "Scheduled delivery is available for orders of Rs. 300 or more"
+          : "Instant delivery is available for orders of Rs. 500 or more",
+      minimum,
+    };
+  }
+
+  return { valid: true, error: null, minimum };
 };
 
 /**
@@ -37,8 +66,20 @@ export const isNightTime = (datetime = null) => {
  * @param {Date|null} deliveryDateTime - When delivery is scheduled. Null for instant.
  * @returns {number} Delivery fee in Rs.
  */
-export const calculateDeliveryFee = (deliveryType, deliveryDateTime = null) => {
-  if (deliveryType === DELIVERY_CONFIG.INSTANT.name) {
+export const calculateDeliveryFee = (deliveryType, deliveryDateTime = null, options = {}) => {
+  const normalizedType = normalizeDeliveryType(deliveryType);
+  const subtotal = Number(options.subtotal ?? 0);
+  const isFirstOrder = Boolean(options.isFirstOrder);
+
+  if (
+    normalizedType === DELIVERY_CONFIG.SCHEDULED.name &&
+    isFirstOrder &&
+    subtotal > 500
+  ) {
+    return 0;
+  }
+
+  if (normalizedType === DELIVERY_CONFIG.INSTANT.name) {
     const checkTime = deliveryDateTime || new Date();
     const isNight = isNightTime(checkTime);
     return isNight
@@ -46,7 +87,7 @@ export const calculateDeliveryFee = (deliveryType, deliveryDateTime = null) => {
       : DELIVERY_CONFIG.INSTANT.baseFee;
   }
 
-  if (deliveryType === DELIVERY_CONFIG.SCHEDULED.name) {
+  if (normalizedType === DELIVERY_CONFIG.SCHEDULED.name) {
     // Scheduled deliveries have fixed rate, no surcharge
     return DELIVERY_CONFIG.SCHEDULED.baseFee;
   }
@@ -112,6 +153,8 @@ export const getDeliveryConfig = () => ({
 
 export default {
   DELIVERY_CONFIG,
+  normalizeDeliveryType,
+  validateDeliveryMinimum,
   isNightTime,
   calculateDeliveryFee,
   calculateCODFee,

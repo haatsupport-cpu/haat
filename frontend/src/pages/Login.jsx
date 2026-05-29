@@ -21,7 +21,7 @@ export default function Login() {
   useEffect(() => {
     if (authLoading || !user) return;
     if (user.role === "admin") navigate("/admin");
-    else navigate("/products");
+    else navigate("/");
   }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e) => {
@@ -40,8 +40,12 @@ export default function Login() {
 
       setAuthToken(token);
       setUser(user);
+      // Clear popup dismissed state so popup can show after login if active
+      try {
+        localStorage.removeItem("haatonline_popup_dismissed");
+      } catch { /* ignore */ }
       if (user.role === "admin") navigate("/admin");
-      else navigate("/products");
+      else navigate("/");
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Login failed. Please check your credentials.");
     } finally {

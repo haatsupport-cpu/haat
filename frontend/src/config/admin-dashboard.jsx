@@ -1,4 +1,4 @@
-import { Menu, Package, Settings, ShoppingCart, Users } from "lucide-react";
+import { Megaphone, Menu, Package, Settings, ShoppingCart, Tag, Users } from "lucide-react";
 
 export const orderStatusOptions = ["pending", "processing", "confirmed", "shipped", "delivered", "cancelled"];
 export const orderPaymentOptions = ["pending", "paid", "failed", "refunded"];
@@ -8,6 +8,8 @@ export const sidebarItems = [
   { id: "products", label: "Products", icon: <Package size={18} /> },
   { id: "orders", label: "Orders", icon: <ShoppingCart size={18} /> },
   { id: "customers", label: "Customers", icon: <Users size={18} /> },
+  { id: "promos", label: "Promo Codes", icon: <Tag size={18} /> },
+  { id: "popups", label: "Popup Ads", icon: <Megaphone size={18} /> },
   { id: "settings", label: "Settings", icon: <Settings size={18} /> },
 ];
 

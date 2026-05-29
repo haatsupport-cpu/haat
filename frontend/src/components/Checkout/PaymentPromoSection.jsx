@@ -3,7 +3,7 @@
 
 import { motion as Motion } from "framer-motion";
 import { CreditCard, Tag, AlertCircle, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function PaymentPromoSection({
   paymentMode,
@@ -16,6 +16,10 @@ export default function PaymentPromoSection({
   loading,
 }) {
   const [localPromo, setLocalPromo] = useState(promoCode);
+
+  useEffect(() => {
+    setLocalPromo(promoCode || "");
+  }, [promoCode]);
 
   const handleApply = () => {
     if (localPromo.trim()) {

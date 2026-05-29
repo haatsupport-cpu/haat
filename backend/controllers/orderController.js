@@ -2,7 +2,10 @@ import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Cart from "../models/Cart.js";
+import PromoCode from "../models/PromoCode.js";
+import { validatePromoCode, calculatePromoDiscount } from "../utils/promoValidator.js";
 import { generateOrderNumber } from "../utils/orderGenerator.js";
+import { normalizeDeliveryType, validateDeliveryMinimum } from "../utils/pricingCalculator.js";
 
 const parseNumeric = (value) => {
   const parsed = Number(value);
@@ -63,6 +66,11 @@ export const createOrder = async (req, res) => {
         ? totalAmount?.subtotal ?? totalAmount?.sub_total ?? req.body.subtotal
         : req.body.subtotal ?? totalAmount;
     const subtotal = parseNumeric(subtotalCandidate ?? 0);
+    const normalizedDeliveryType = normalizeDeliveryType(req.body.deliveryType ?? "instant");
+    const deliveryMinimum = validateDeliveryMinimum(normalizedDeliveryType, subtotal);
+    if (!deliveryMinimum.valid) {
+      return res.status(400).json({ message: deliveryMinimum.error });
+    }
     const tax = parseNumeric(
       totalAmount && typeof totalAmount === "object"
         ? totalAmount?.tax ?? req.body.tax
@@ -81,6 +89,42 @@ export const createOrder = async (req, res) => {
 
     session.startTransaction();
     const lineItems = await buildLineItems(items, session);
+    const calculatedSubtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+
+    let promoDiscount = 0;
+    let promoCodeId = null;
+
+    const promoIdSearch = req.body.promoCodeId || req.body.promoId;
+    const promoCodeSearch = req.body.promoCode;
+
+    let promo = null;
+    if (promoIdSearch && mongoose.Types.ObjectId.isValid(promoIdSearch)) {
+      promo = await PromoCode.findById(promoIdSearch).session(session);
+    } else if (promoCodeSearch) {
+      promo = await PromoCode.findOne({ code: String(promoCodeSearch).trim().toUpperCase(), isActive: true }).session(session);
+    }
+
+    if (promo) {
+      try {
+        const validation = validatePromoCode(promo, normalizedDeliveryType);
+        if (!validation.valid) {
+          throw new Error(validation.error);
+        }
+        const discount = calculatePromoDiscount(promo, calculatedSubtotal);
+        if (discount.error) {
+          throw new Error(discount.error);
+        }
+        promoDiscount = discount.discountAmount;
+        promoCodeId = promo._id;
+      } catch (err) {
+        throw { statusCode: 400, message: err.message };
+      }
+    }
+
+    const calculatedTotal = Number.isFinite(total)
+      ? total
+      : calculatedSubtotal + parseNumeric(req.body.deliveryFee) + parseNumeric(req.body.codFee) - promoDiscount;
+
     const order = await Order.create(
       [
         {
@@ -89,15 +133,15 @@ export const createOrder = async (req, res) => {
           customerPhone: req.body.customerPhone ?? "",
           deliveryAddress: req.body.deliveryAddress ?? "",
           landmark: req.body.landmark ?? "",
-          deliveryType: req.body.deliveryType ?? "instant",
+          deliveryType: normalizedDeliveryType,
           scheduledDeliveryAt: req.body.scheduledDeliveryAt ? new Date(req.body.scheduledDeliveryAt) : null,
           paymentMode: req.body.paymentMode ?? "unknown",
-          promoCodeId: req.body.promoCodeId || null,
-          promoDiscount: parseNumeric(req.body.promoDiscount ?? 0),
+          promoCodeId,
+          promoDiscount,
           deliveryFee: parseNumeric(req.body.deliveryFee ?? 0),
           codFee: parseNumeric(req.body.codFee ?? 0),
-          subtotal: Number.isFinite(subtotal) ? subtotal : lineItems.reduce((sum, item) => sum + item.total, 0),
-          totalAmount: Number.isFinite(total) ? total : lineItems.reduce((sum, item) => sum + item.total, 0),
+          subtotal: calculatedSubtotal,
+          totalAmount: calculatedTotal,
           status: "pending",
           orderNumber: generateOrderNumber(),
           items: lineItems,
@@ -110,6 +154,14 @@ export const createOrder = async (req, res) => {
       await Product.updateOne(
         { _id: item.productId, stock: { $gte: item.quantity } },
         { $inc: { stock: -item.quantity } },
+        { session }
+      );
+    }
+
+    if (promoCodeId) {
+      await PromoCode.updateOne(
+        { _id: promoCodeId },
+        { $inc: { uses: 1 } },
         { session }
       );
     }
@@ -144,47 +196,34 @@ export const getOrders = async (req, res) => {
 
     return res.json(
       orders.map((order) => ({
-        // IDs (support both conventions)
         id: order._id.toString(),
         _id: order._id.toString(),
         userId: order.userId.toString(),
         user_id: order.userId.toString(),
-        
-        // Core order info
         orderNumber: order.orderNumber || `ORD-${order._id.toString().slice(-8)}`,
         status: order.status,
         paymentStatus: order.paymentStatus || "pending",
         payment: order.paymentStatus || "pending",
-        
-        // Customer info
         customerName: order.customerName || "Guest",
         customer_name: order.customerName || "Guest",
         customerPhone: order.customerPhone,
         customer_phone: order.customerPhone,
-        
-        // Amounts (support both conventions)
         totalAmount: order.totalAmount,
         total_amount: order.totalAmount,
         subtotal: order.subtotal,
         tax: order.tax,
         shipping: order.shipping,
-        
-        // Delivery info
         deliveryAddress: order.deliveryAddress,
         delivery_address: order.deliveryAddress,
         landmark: order.landmark,
         deliveryType: order.deliveryType,
         delivery_type: order.deliveryType,
-        
-        // Timing
         createdAt: order.createdAt,
         created_at: order.createdAt,
         updatedAt: order.updatedAt,
         updated_at: order.updatedAt,
         placedAt: order.createdAt,
         placed_at: order.createdAt,
-        
-        // Items
         items: order.items || [],
       }))
     );
@@ -198,7 +237,6 @@ export const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status, paymentStatus } = req.body;
 
-    // Determine which field to update
     const updateData = {};
     
     if (status) {

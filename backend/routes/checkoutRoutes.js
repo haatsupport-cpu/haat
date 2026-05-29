@@ -15,6 +15,12 @@ router.get("/pricing", asyncHandler(checkoutController.getPricingConfig));
 // Validate promo code
 router.post("/validate-promo", validatePromoBody, asyncHandler(checkoutController.validatePromo));
 
+// Promos available to current customer
+router.get("/my-promos", requireAuth, asyncHandler(checkoutController.getMyPromos));
+
+// Active lightweight marketing popup
+router.get("/popup-ad", asyncHandler(checkoutController.getActivePopupAd));
+
 // Calculate order total with all charges
 router.post("/calculate-total", asyncHandler(checkoutController.calculateOrderTotal));
 

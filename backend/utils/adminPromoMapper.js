@@ -1,0 +1,32 @@
+export const toPromoResponse = (promo) => ({
+  id: promo._id?.toString?.() ?? promo.id,
+  _id: promo._id?.toString?.() ?? promo.id,
+  code: promo.code,
+  description: promo.description || "",
+  discountType: promo.discountType ?? "percentage",
+  discountValue: promo.discountValue,
+  minimumOrderValue: promo.minimumOrderValue ?? promo.minOrderAmount ?? 0,
+  minOrderAmount: promo.minOrderAmount ?? promo.minimumOrderValue ?? 0,
+  deliveryOptions: promo.deliveryOptions ?? ["instant", "scheduled"],
+  expiryDate: promo.expiryDate ?? promo.expiresAt ?? null,
+  expiresAt: promo.expiresAt ?? promo.expiryDate ?? null,
+  activeStatus: Boolean(promo.activeStatus ?? promo.isActive),
+  isActive: Boolean(promo.isActive ?? promo.activeStatus),
+  uses: promo.uses ?? 0,
+  createdAt: promo.createdAt,
+  updatedAt: promo.updatedAt,
+});
+
+export const toPopupResponse = (popup) => ({
+  id: popup._id?.toString?.() ?? popup.id,
+  _id: popup._id?.toString?.() ?? popup.id,
+  title: popup.title || "",
+  description: popup.description || popup.textContent || "",
+  textContent: popup.textContent || popup.description || "",
+  image: popup.image || popup.imageUrl || "",
+  imageUrl: popup.imageUrl || popup.image || "",
+  targetLink: popup.targetLink || "",
+  isActive: Boolean(popup.isActive),
+  createdAt: popup.createdAt,
+  updatedAt: popup.updatedAt,
+});

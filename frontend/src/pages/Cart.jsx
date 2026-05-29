@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/useAuth"
 import { cartService } from "../services/cart-service"
+import { calculateDeliveryFee, validateDeliveryMinimum } from "../utils/checkoutCalculator"
 
 export default function Cart() {
   const navigate = useNavigate()
@@ -9,6 +10,7 @@ export default function Cart() {
   const [cartItems, setCartItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [deliveryType, setDeliveryType] = useState("instant")
 
   const fetchCart = async () => {
     try {
@@ -84,7 +86,10 @@ export default function Cart() {
     (acc, item) => acc + item.price * item.quantity,
     0
   )
-  const shippingFee = subtotal > 0 ? 100.0 : 0
+  const deliveryValidation = validateDeliveryMinimum(deliveryType, subtotal)
+  const shippingFee = cartItems.length > 0
+    ? calculateDeliveryFee(deliveryType, null, { subtotal, isFirstOrder: false })
+    : 0
   const total = subtotal + shippingFee
 
   if (loading)
@@ -194,6 +199,24 @@ export default function Cart() {
                 <span>Shipping:</span>
                 <span>Rs. {shippingFee.toFixed(2)}</span>
               </div>
+              <div className="space-y-2 rounded-xl bg-gray-50 p-3">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Delivery Option
+                </label>
+                <select
+                  value={deliveryType}
+                  onChange={(e) => setDeliveryType(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-green-700"
+                >
+                  <option value="instant">Instant Delivery</option>
+                  <option value="scheduled">Scheduled Delivery</option>
+                </select>
+                {!deliveryValidation.valid && (
+                  <p className="text-sm font-medium text-red-600">
+                    {deliveryValidation.error}
+                  </p>
+                )}
+              </div>
               <div className="flex justify-between text-xl font-bold pt-2 border-t border-gray-200 text-red-800">
                 <span>Order Total:</span>
                 <span>Rs. {total.toFixed(2)}</span>
@@ -201,8 +224,9 @@ export default function Cart() {
             </div>
 
             <button
-              onClick={() => navigate("/checkout")}
-              className="w-full bg-green-800 text-white font-semibold text-lg px-6 py-3 rounded-lg shadow-lg hover:bg-green-600 transition duration-300 ease-in-out"
+              onClick={() => navigate("/checkout", { state: { deliveryType } })}
+              disabled={!deliveryValidation.valid}
+              className="w-full bg-green-800 text-white font-semibold text-lg px-6 py-3 rounded-lg shadow-lg hover:bg-green-600 transition duration-300 ease-in-out disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               Proceed to Checkout
             </button>

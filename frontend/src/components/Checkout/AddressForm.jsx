@@ -45,10 +45,10 @@ export default function AddressForm({
           />
         </div>
 
-        {/* phoneno */}
+        {/* Phone Number */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            phoneno Number *
+            Phone Number *
           </label>
           <input
             type="tel"
@@ -60,7 +60,7 @@ export default function AddressForm({
           {formData.customerPhone &&
             !validatePhone(formData.customerPhone) && (
               <p className="mt-1 text-xs text-red-500">
-                phoneno must be 10 digits
+                Phone number must be 10 digits
               </p>
             )}
         </div>
