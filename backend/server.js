@@ -58,8 +58,8 @@ if (CONFIG.ENABLE_HELMET) {
  */
 const corsOptions = getCorsOptions();
 
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.use(cors(getCorsOptions()));
+app.options(/.*/, cors(getCorsOptions()));
 
 /**
  * =========================
